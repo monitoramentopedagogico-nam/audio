@@ -1,8 +1,16 @@
 from django.urls import path
+from django.contrib.auth import views as auth_views
 from . import views
 
 urlpatterns = [
-    path("", views.index, name="index"),
+    path(
+        "",
+        auth_views.LoginView.as_view(
+            template_name="registration/login.html",
+            redirect_authenticated_user=True,
+        ),
+        name="index",
+    ),
     path("api/location/", views.location_update, name="location_update"),
     path("locations/", views.locations_list, name="locations_list"),
     path("audio/", views.audio, name="audio"),
