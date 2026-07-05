@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -57,16 +58,31 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "mysite.wsgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("POSTGRES_DB", "mydatabase"),
-        "USER": os.getenv("POSTGRES_USER", "myuser"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD", "mypassword"),
-        "HOST": os.getenv("POSTGRES_HOST", "db"),
-        "PORT": os.getenv("POSTGRES_PORT", "5432"),
+database_url = os.getenv("DATABASE_URL", "").strip()
+
+if database_url:
+    database = urlparse(database_url)
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": database.path.lstrip("/"),
+            "USER": database.username or "",
+            "PASSWORD": database.password or "",
+            "HOST": database.hostname or "",
+            "PORT": str(database.port or 5432),
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("POSTGRES_DB", "mydatabase"),
+            "USER": os.getenv("POSTGRES_USER", "myuser"),
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "mypassword"),
+            "HOST": os.getenv("POSTGRES_HOST", "db"),
+            "PORT": os.getenv("POSTGRES_PORT", "5432"),
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {
