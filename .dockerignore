@@ -3,8 +3,16 @@ __pycache__/
 *.pyo
 *.pyd
 .env
+.git/
+.venv/
 venv/
 env/
 node_modules/
 .DS_Store
 db.sqlite3
+media/
+mysite/media/
+mysite/recordings/
+recordings/
+pdf_analysis_pages/
+certs/

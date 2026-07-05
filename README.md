@@ -11,7 +11,7 @@ Este projeto contém uma aplicação Django simples configurada para rodar em Do
    ```bash
    docker compose up --build
    ```
-3. Acesse http://localhost:8000
+3. Acesse http://localhost:8080/audio/
 
 ### Estrutura
 
@@ -42,4 +42,22 @@ O projeto agora usa PostgreSQL via Docker Compose. As credenciais padrão são:
 - porta: `5432`
 
 Se quiser alterar essas variáveis, edite `docker-compose.yml`.
+
+## Deploy no Easypanel
+
+Use o `Dockerfile` ou o arquivo `docker-compose.easypanel.yml`.
+
+Configure as variáveis de ambiente:
+
+```env
+SECRET_KEY=gere-uma-chave-segura
+DEBUG=False
+ALLOWED_HOSTS=audio.seudominio.com
+CSRF_TRUSTED_ORIGINS=https://audio.seudominio.com
+POSTGRES_DB=mydatabase
+POSTGRES_USER=myuser
+POSTGRES_PASSWORD=senha-segura
+```
+
+O app escuta na porta `8080`. O HTTPS deve ser feito pelo proxy/domínio do Easypanel.
 
