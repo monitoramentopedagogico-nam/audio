@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Meus Recordings</title>
+  <style>body{font-family:Arial,Helvetica,sans-serif;padding:16px}</style>
+</head>
+<body>
+  <h1>Meus Gravações</h1>
+  <ul>
+    {% for r in recordings %}
+      <li><a href="{{ r.file.url }}">{{ r.file.name }}</a> — {{ r.created_at }}</li>
+    {% empty %}
+      <li>Não há gravações</li>
+    {% endfor %}
+  </ul>
+</body>
+</html>

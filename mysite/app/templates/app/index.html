@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Geolocalização em tempo real</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+      background: #f5f7fb;
+      color: #222;
+    }
+    #info {
+      padding: 16px;
+      background: #fff;
+      border-bottom: 1px solid #ddd;
+    }
+    #info h1 {
+      margin: 0 0 8px;
+      font-size: 1.4rem;
+    }
+    #info p {
+      margin: 4px 0;
+      line-height: 1.5;
+    }
+    #startButton {
+      margin-top: 8px;
+      padding: 10px 16px;
+      border: none;
+      background: #007bff;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    #startButton:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    #map {
+      width: 100%;
+      height: calc(100vh - 120px);
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h1>Geolocalização em tempo real</h1>
+    <p id="status">Clique em Iniciar para permitir a localização.</p>
+    <button id="startButton">Iniciar</button>
+    <button id="retryButton" style="display:none;margin-left:8px;">Tentar novamente</button>
+    <p>Use este mapa no navegador. No localhost, a geolocalização funciona sem HTTPS.</p>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const statusEl = document.getElementById('status');
+    const startButton = document.getElementById('startButton');
+
+    const map = L.map('map').setView([0, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    let marker = null;
+    let accuracyCircle = null;
+
+    function updateStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function handlePosition(position) {
+      const { latitude, longitude, accuracy } = position.coords;
+      const latlng = [latitude, longitude];
+
+      if (!marker) {
+        marker = L.marker(latlng).addTo(map).bindPopup('Você está aqui').openPopup();
+        accuracyCircle = L.circle(latlng, {
+          radius: accuracy,
+          color: '#136aec',
+          fillColor: '#136aec',
+          fillOpacity: 0.15,
+        }).addTo(map);
+        map.setView(latlng, 16);
+      } else {
+        marker.setLatLng(latlng);
+        accuracyCircle.setLatLng(latlng).setRadius(accuracy);
+      }
+
+      updateStatus(`Latitude: ${latitude.toFixed(6)} | Longitude: ${longitude.toFixed(6)} | Precisão: ${accuracy.toFixed(1)} m`);
+
+      // Send position to backend
+      try {
+        const csrftoken = document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+        fetch('/api/location/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken || ''
+          },
+          body: JSON.stringify({ latitude, longitude, accuracy })
+        }).catch(() => {});
+      } catch (e) { /* ignore */ }
+    }
+
+    function handleError(error) {
+      switch (error.code) {
+        case error.PERMISSION_DENIED:
+          updateStatus('Permissão negada. Atualize e autorize a localização.');
+          break;
+        case error.POSITION_UNAVAILABLE:
+          updateStatus('Localização indisponível.');
+          break;
+        case error.TIMEOUT:
+          updateStatus('A solicitação excedeu o tempo limite.');
+          break;
+        default:
+          updateStatus('Erro desconhecido: ' + error.message);
+      }
+    }
+
+    function startWatch() {
+      if (!navigator.geolocation) {
+        updateStatus('Seu navegador não suporta geolocalização.');
+        return;
+      }
+
+      updateStatus('Aguardando a sua localização...');
+      navigator.geolocation.watchPosition(handlePosition, handleError, {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 20000,
+      });
+      startButton.disabled = true;
+    }
+
+    startButton.addEventListener('click', startWatch);
+
+    // Permission-check and retry helper
+    const retryButton = document.getElementById('retryButton');
+    function checkPermissionState() {
+      if (!navigator.permissions) return;
+      navigator.permissions.query({ name: 'geolocation' }).then(p => {
+        if (p.state === 'denied') {
+          updateStatus('Permissão negada. Abra configurações do site e permita a localização, depois clique em Tentar novamente.');
+          retryButton.style.display = 'inline-block';
+          startButton.disabled = true;
+        } else {
+          retryButton.style.display = 'none';
+          startButton.disabled = false;
+        }
+        p.onchange = checkPermissionState;
+      }).catch(() => {});
+    }
+
+    retryButton.addEventListener('click', () => { location.reload(); });
+    checkPermissionState();
+  </script>
+</body>
+</html>

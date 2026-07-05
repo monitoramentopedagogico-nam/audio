@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Dashboard do Aluno</h1>
+<p>Minhas amostras rotuladas</p>
+<ul>
+  {% for s in samples %}
+  <li>{{ s.created_at }} — {{ s.exercise }} — {{ s.labels }} — <a href="{{ s.recording.file.url }}">audio</a></li>
+  {% empty %}
+  <li>Nenhuma amostra encontrada.</li>
+  {% endfor %}
+</ul>
+{% endblock %}

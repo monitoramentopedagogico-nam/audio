@@ -1,0 +1,451 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Captação de Sax - Live</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;padding:16px}
+    #controls{margin-bottom:12px}
+    #meter{width:300px;height:24px;background:#222;border-radius:4px;overflow:hidden}
+    #meter>div{height:100%;background:#4caf50;width:0}
+    canvas{width:100%;height:120px;background:#111;display:block}
+    #suggestions{margin-top:12px}
+    #scoreContainer{margin-top:12px;padding:12px;border:1px solid #ddd;border-radius:8px;background:#fff;min-height:140px;box-sizing:border-box}
+    #scoreContainer svg{width:100%;max-width:620px;height:auto;display:block}
+    #noteTimeline{margin-top:8px;padding-left:20px}
+    #beginnerPanel{border:1px solid #d7e3d8;background:#f7fbf7;border-radius:8px;padding:14px;margin-bottom:14px}
+    #beginnerPanel h2{margin:0 0 10px;font-size:22px}
+    #beginnerControls{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
+    #beginnerControls label{display:flex;flex-direction:column;gap:4px;font-size:13px}
+    #beginnerControls select,#beginnerControls input{min-width:120px;padding:6px}
+    #beginnerControls button{padding:7px 10px}
+    #perceptionControls{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:0 0 12px}
+    #perceptionControls label{display:flex;flex-direction:column;gap:4px;font-size:13px}
+    #perceptionControls select{min-width:150px;padding:6px}
+    .perception-hidden{display:none!important}
+    #beginnerSignal{display:grid;grid-template-columns:minmax(150px,220px) 1fr;gap:14px;align-items:center}
+    #beginnerLight{height:120px;border-radius:8px;background:#9ca3af;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;font-size:22px;text-align:center}
+    #beginnerLight.ready{background:#607d8b}
+    #beginnerLight.good{background:#2e7d32}
+    #beginnerLight.close{background:#f9a825;color:#222}
+    #beginnerLight.bad{background:#c62828}
+    #beginnerMessage{font-size:18px;margin-bottom:8px}
+    #beginnerProgress{height:16px;background:#e5e7eb;border-radius:8px;overflow:hidden}
+    #beginnerProgressFill{height:100%;width:0;background:#2e7d32;transition:width .12s linear}
+    #beginnerRoutine{border-top:1px solid #d7e3d8;margin-top:12px;padding-top:12px}
+    #routineStepTitle{font-weight:bold;margin-bottom:6px}
+    #routineStepHelp{margin-bottom:8px;color:#374151}
+    #routineSequence{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+    #routineSequence span{border:1px solid #cbd5e1;border-radius:6px;padding:5px 8px;background:#fff}
+    #routineSequence span.active{background:#2e7d32;color:#fff;border-color:#2e7d32}
+    #routineNav{display:flex;gap:8px;flex-wrap:wrap}
+    #calibrationPanel{border-top:1px solid #d7e3d8;margin-top:12px;padding-top:12px}
+    #calibrationPanel button{padding:7px 10px}
+    #calibrationStatus{margin-top:8px;color:#374151}
+    #advancedToggle{margin:4px 0 12px}
+    .advanced-hidden{display:none}
+    @media (max-width:640px){#beginnerSignal{grid-template-columns:1fr}#beginnerLight{height:92px}}
+    *{box-sizing:border-box}
+    body{margin:0;background:#f5f7f6;color:#111827}
+    h1{font-size:clamp(24px,7vw,36px);line-height:1.1;margin:0 0 14px}
+    h2,h3{line-height:1.2}
+    button,select,input{font:inherit}
+    button{min-height:40px;border:1px solid #9ca3af;border-radius:6px;background:#fff;padding:8px 12px}
+    button:disabled{opacity:.55}
+    select,input{border:1px solid #9ca3af;border-radius:6px;background:#fff;min-height:40px}
+    #controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    #meter{width:100%;max-width:420px}
+    #beginnerControls label{flex:1 1 140px}
+    #beginnerControls select,#beginnerControls input{width:100%}
+    #perceptionControls label{flex:1 1 150px}
+    #perceptionControls select{width:100%}
+    #realtime>div{display:flex;gap:12px;flex-wrap:wrap}
+    #realtime>div>div{flex:1 1 160px;min-width:0}
+    #tuningRow{margin-top:6px}
+    #tuningMeterWrap{min-width:220px}
+    #tuningMeter{width:200px;max-width:100%}
+    .tool-section{margin-top:16px;border:1px solid #e0e0e0;padding:12px;border-radius:8px;background:#fff}
+    .tool-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+    .tool-row:first-child{margin-top:0}
+    .tool-row label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+    .tool-row input[type="url"]{min-width:320px;flex:1;padding:8px}
+    #chordSheetInput{width:100%;margin-top:8px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;resize:vertical;font-family:Consolas,monospace}
+    #arrangementSummary{margin-top:10px;color:#374151}
+    #arrangementChords,#arrangementNotes{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+    #arrangementChords span,#arrangementNotes span{border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:5px 8px}
+    #melodicCipher{margin-top:12px;overflow-x:auto}
+    #melodicCipher table{width:100%;border-collapse:collapse;background:#fff}
+    #melodicCipher th,#melodicCipher td{border:1px solid #cbd5e1;padding:8px;text-align:left;vertical-align:top}
+    #melodicCipher th{background:#eef6ef}
+    #melodicCipher td:nth-child(2){min-width:220px;white-space:normal}
+    #lyricMelodyInput{width:100%;margin-top:8px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;resize:vertical;font-family:Consolas,monospace}
+    #lyricMelodyOutput{margin-top:12px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:12px}
+    .lyric-melody-line{margin:10px 0 16px;text-align:center}
+    .lyric-melody-notes{font-family:Consolas,monospace;font-weight:700;color:#008000;white-space:pre-wrap}
+    .lyric-melody-notes .strong{color:#ff6b00}
+    .lyric-melody-text{font-size:20px;margin-top:4px;white-space:pre-wrap}
+    #scoreContainer{max-width:100%;overflow-x:auto}
+    @media (max-width:700px){
+      body{padding:10px}
+      #beginnerPanel{padding:10px;border-radius:0;margin-left:-10px;margin-right:-10px;border-left:0;border-right:0}
+      #beginnerControls,#perceptionControls,#controls,.tool-row{display:grid;grid-template-columns:1fr;gap:8px;align-items:stretch}
+      #beginnerControls label,#perceptionControls label{width:100%;min-width:0}
+      #beginnerControls button,#controls button,.tool-row button,#advancedToggle,#calibrationPanel button{width:100%}
+      #beginnerSignal{grid-template-columns:1fr}
+      #beginnerLight{height:92px;font-size:20px}
+      #beginnerMessage{font-size:16px}
+      #routineSequence{gap:5px}
+      #routineSequence span{flex:1 1 calc(50% - 5px);text-align:center;padding:8px 6px}
+      #routineNav{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+      #calibrationPanel{display:grid;gap:8px}
+      #advancedTools{overflow-x:hidden}
+      #meter{max-width:none}
+      #realtime>div{display:grid!important;grid-template-columns:1fr}
+      #tuningMeterWrap{min-width:0}
+      #tuningMeter{width:100%}
+      input[type="number"],select{width:100%!important}
+      canvas{height:96px}
+    }
+  </style>
+</head>
+<body>
+  <h1>Capta&ccedil;&atilde;o de Sax - Live</h1>
+  <section id="beginnerPanel" aria-live="polite">
+    <h2>Modo iniciante</h2>
+    <div id="beginnerControls">
+      <label>Exerc&iacute;cio
+        <select id="beginnerExercise">
+          <option value="routine_level_1">Rotina Nivel 1</option>
+          <option value="challenge_2_f">Desafio 2 - Fa maior</option>
+          <option value="challenge_2_g">Desafio 2 - Sol maior</option>
+          <option value="perception_f">Percepcao - Fa maior</option>
+          <option value="perception_g">Percepcao - Sol maior</option>
+          <option value="perception_degrees">Percepcao por graus</option>
+          <option value="music_licks">Licks tirados da musica</option>
+          <option value="worship_licks">Licks para louvor</option>
+          <option value="hold_note">Sustentar uma nota</option>
+          <option value="steady_air">Som est&aacute;vel</option>
+          <option value="with_metronome">Tocar com metr&ocirc;nomo</option>
+        </select>
+      </label>
+      <label>Instrumento
+        <select id="beginnerInstrument">
+          <option value="alto" selected>Sax alto (Eb)</option>
+          <option value="tenor">Sax tenor (Bb)</option>
+          <option value="soprano">Sax soprano (Bb)</option>
+        </select>
+      </label>
+      <label>Nota alvo
+        <select id="beginnerTargetNote"></select>
+      </label>
+      <label>BPM
+        <input id="beginnerBpm" type="number" value="60" min="30" max="240">
+      </label>
+      <button id="beginnerStartBtn" type="button">Come&ccedil;ar</button>
+      <button id="beginnerStopBtn" type="button" disabled>Parar</button>
+      <button id="beginnerRepeatBtn" type="button">Repetir</button>
+      <button id="beginnerReferenceBtn" type="button">Ouvir refer&ecirc;ncia</button>
+      <button id="beginnerMetronomeBtn" type="button">Metr&ocirc;nomo</button>
+    </div>
+    <div id="perceptionControls" class="perception-hidden">
+      <label>Tom
+        <select id="perceptionKey">
+          <option value="C4">Do (C)</option>
+          <option value="C#4">Do# (C#)</option>
+          <option value="D4">Re (D)</option>
+          <option value="Eb4">Mib (Eb)</option>
+          <option value="E4">Mi (E)</option>
+          <option value="F4" selected>Fa (F)</option>
+          <option value="F#4">Fa# (F#)</option>
+          <option value="G4">Sol (G)</option>
+          <option value="Ab4">Lab (Ab)</option>
+          <option value="A4">La (A)</option>
+          <option value="Bb4">Sib (Bb)</option>
+          <option value="B4">Si (B)</option>
+        </select>
+      </label>
+      <label>Escala
+        <select id="perceptionScale">
+          <option value="major">Maior</option>
+          <option value="pentatonic" selected>Pentatonica</option>
+          <option value="blues">Penta blues</option>
+        </select>
+      </label>
+      <label>Padrao
+        <select id="perceptionPattern">
+          <optgroup label="Percepcao">
+            <option value="up_down">1-2-3-5-6-5-3-2-1</option>
+            <option value="jump">1-3-2-5-6-3-2-6-1</option>
+            <option value="response">3-5-6-3-5-3-2-6-1</option>
+            <option value="blues_line">1-3b-3-5-6-5-3b-2-1</option>
+          </optgroup>
+          <optgroup label="Licks tirados da musica">
+            <option value="music_lick_1">Lick 1: 6-5-2-1-6-5-3</option>
+            <option value="music_lick_2">Lick 2: 3-1-2-3-2-1</option>
+            <option value="music_lick_3">Lick 3: 5-2-1-5-2-1-6-5-1</option>
+          </optgroup>
+          <optgroup label="Licks para louvor">
+            <option value="worship_approach">Entrada suave: 5-6-5-3-2-1</option>
+            <option value="worship_response">Resposta curta: 1-2-3-5-3-2-1</option>
+            <option value="worship_closure">Finalizacao: 3-5-6-5-3-1</option>
+            <option value="worship_call">Chamada: 6-5-3-2-3-5-1</option>
+          </optgroup>
+        </select>
+      </label>
+      <button id="worshipSaxReferenceBtn" type="button">Ouvir como sax</button>
+    </div>
+    <div id="calibrationPanel">
+      <button id="calibrateMicBtn" type="button">Calibrar microfone</button>
+      <span id="calibrationStatus">Calibra&ccedil;&atilde;o recomendada no celular.</span>
+    </div>
+    <div id="beginnerRoutine">
+      <div id="routineStepTitle">Rotina Nivel 1</div>
+      <div id="routineStepHelp">Siga os passos em ordem. O app ajusta nota, BPM e objetivo automaticamente.</div>
+      <div id="routineSequence"></div>
+      <div id="routineNav">
+        <button id="routinePrevBtn" type="button">Anterior</button>
+        <button id="routineNextBtn" type="button">Proximo</button>
+      </div>
+    </div>
+    <div id="beginnerSignal">
+      <div id="beginnerLight" class="ready">Pronto</div>
+      <div>
+        <div id="beginnerMessage">Escolha uma nota, clique em Come&ccedil;ar e tente deixar o medidor verde.</div>
+        <div id="beginnerProgress"><div id="beginnerProgressFill"></div></div>
+        <div style="margin-top:8px"><strong>Progresso:</strong> <span id="beginnerProgressText">0 de 5 segundos afinado</span></div>
+        <div><strong>Melhor sequ&ecirc;ncia:</strong> <span id="beginnerBestText">0.0 s</span></div>
+      </div>
+    </div>
+  </section>
+  <button id="advancedToggle" type="button">Mostrar ferramentas avan&ccedil;adas</button>
+  <div id="advancedTools" class="advanced-hidden">
+  <h1>Captação de Sax — Live</h1>
+  <div id="controls">
+    <button id="startBtn">Iniciar captura</button>
+    <button id="stopBtn" disabled>Parar</button>
+    <label><input id="monitor" type="checkbox"> Monitor (ouvir)</label>
+    <button id="recStart">Gravar</button>
+    <button id="recStop" disabled>Parar gravação</button>
+    <button id="playScoreBtn" disabled>Executar partitura</button>
+    <button id="clearScoreBtn" disabled>Limpar partitura</button>
+    <button id="exportMusicXMLBtn" disabled>Exportar MusicXML (MuseScore)</button>
+    <button id="exportMidiBtn" disabled>Exportar MIDI</button>
+  </div>
+
+  <div id="meter"><div></div></div>
+  <canvas id="spectrum"></canvas>
+  <h3>Medições em tempo real</h3>
+  <div id="realtime">
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="min-width:160px">
+        <strong>RMS</strong>
+        <div id="rmsMeter" style="height:14px;background:#eee;border-radius:4px;overflow:hidden"><div id="rmsFill" style="height:100%;background:#2196f3;width:0"></div></div>
+      </div>
+      <div style="min-width:160px">
+        <strong>Spectral centroid</strong>
+        <div id="centroidVal">— Hz</div>
+      </div>
+      <div style="min-width:160px">
+        <strong>Spectral flux</strong>
+        <div id="fluxVal">—</div>
+      </div>
+      <div style="min-width:160px">
+        <strong>HNR (est.)</strong>
+        <div id="hnrVal">— dB</div>
+      </div>
+      <div style="min-width:160px">
+        <strong>Ataque</strong>
+        <div id="attackVal">—</div>
+      </div>
+    </div>
+    <canvas id="spectrogram" style="width:100%;height:120px;background:#000;margin-top:8px;display:block"></canvas>
+  </div>
+
+  <div>
+    <strong>Frequência estimada:</strong> <span id="pitch">—</span> Hz
+  </div>
+  <div>
+    <strong>Nota atual:</strong> <span id="currentNote">—</span>
+  </div>
+  <div id="tuningRow" class="tool-row">
+    <div>
+      <strong>Desvio (cents):</strong> <span id="cents">—</span>
+    </div>
+    <div id="tuningMeterWrap">
+      <strong>Medidor de afinação</strong>
+      <div id="tuningMeter" style="height:12px;background:#ddd;border-radius:6px;position:relative;overflow:hidden">
+        <div id="tuningFill" style="position:absolute;left:50%;top:0;bottom:0;width:2px;background:#333"></div>
+        <div id="tuningNeedle" style="position:absolute;left:50%;top:-6px;width:2px;height:24px;background:#e91e63;transform:translateX(-50%)"></div>
+      </div>
+    </div>
+    <div>
+      <strong>Estabilidade:</strong> <span id="stability">—</span>
+    </div>
+  </div>
+  <div>
+    <h3>Partitura</h3>
+    <div id="scoreContainer" aria-live="polite"></div>
+    <ul id="noteTimeline"></ul>
+  </div>
+
+  <div id="reference">
+    <h3>Referência de som</h3>
+    <p>Use este exemplo como referência de estilo e timbre:</p>
+    <p><a href="https://www.youtube.com/watch?v=ONOvKWES7f8&list=RDMM&start_radio=1&rv=tWAW7ZLkKh0" target="_blank" rel="noopener" id="refLink">YouTube: referência de sax</a></p>
+    <button id="listenRef">Ouvir referência</button>
+    <p>Dicas rápidas: mantenha o som centralizado, evite excesso de brilho, e busque uma emissão sólida com ar apoiado.</p>
+  </div>
+
+  <div id="arrangementBuilder" class="tool-section">
+    <h3>Criar arranjo por cifra</h3>
+    <div class="tool-row">
+      <label>Link da cifra:
+        <input id="chordSheetUrl" type="url" placeholder="https://www.cifraclub.com.br/artista/musica/">
+      </label>
+      <button id="fetchChordSheetBtn" type="button">Buscar cifra pelo link</button>
+    </div>
+    <textarea id="chordSheetInput" rows="8" placeholder="Cole aqui a cifra com acordes do Cifra Club"></textarea>
+    <div class="tool-row">
+      <label>BPM: <input id="arrangementBpm" type="number" value="70" min="30" max="180"></label>
+      <label>Estilo:
+        <select id="arrangementStyle">
+          <option value="worship" selected>Louvor</option>
+          <option value="simple">Simples</option>
+          <option value="response">Resposta</option>
+          <option value="ending">Finalizacao</option>
+        </select>
+      </label>
+      <button id="analyzeChordSheetBtn" type="button">Analisar cifra</button>
+      <button id="playArrangementBtn" type="button" disabled>Ouvir arranjo como sax</button>
+      <button id="useArrangementPracticeBtn" type="button" disabled>Praticar no modo iniciante</button>
+    </div>
+    <div id="arrangementSummary">Cole uma cifra para gerar uma linha simples de sax.</div>
+    <div id="arrangementChords"></div>
+    <div id="arrangementNotes"></div>
+    <div id="melodicCipher"></div>
+  </div>
+
+  <div id="lyricMelodyBuilder" class="tool-section">
+    <h3>Cifra melodica por letra</h3>
+    <textarea id="lyricMelodyInput" rows="8" placeholder="Digite em pares de linhas:&#10;mi la si DO# DO# , DO# RE DO# si la re fa#&#10;Porque Ele vive, posso crer no amanha;"></textarea>
+    <div class="tool-row">
+      <button id="renderLyricMelodyBtn" type="button">Exibir cifra melodica</button>
+      <button id="playLyricMelodyBtn" type="button" disabled>Ouvir melodia como sax</button>
+      <button id="practiceLyricMelodyBtn" type="button" disabled>Praticar melodia</button>
+    </div>
+    <div id="lyricMelodyOutput"></div>
+  </div>
+
+  <div id="exercises" class="tool-section">
+    <h3>Exercícios e feedback</h3>
+    <div class="tool-row">
+      <button id="syncLocalDataBtn">Sincronizar dados locais</button>
+      <span id="syncStatus">Pronto para sincronizar</span>
+    </div>
+    <div class="tool-row">
+      <label>Exercício: <select id="exerciseSelect"><option value="long_tone">Long tones</option><option value="scales">Scales</option><option value="articulation">Articulação</option></select></label>
+      <button id="startExerciseBtn">Iniciar exercício</button>
+      <button id="stopExerciseBtn" disabled>Parar exercício</button>
+      <button id="saveSessionBtn" disabled>Salvar sessão</button>
+    </div>
+    <div class="tool-row">
+      <label>BPM: <input id="metronomeBpm" type="number" value="60" min="30" max="240" style="width:70px"></label>
+      <button id="startMetronomeBtn">Iniciar metrônomo</button>
+      <button id="stopMetronomeBtn" disabled>Parar metrônomo</button>
+      <label>Alvo: <select id="targetNote">
+        <option value="C3">C3</option>
+        <option value="C#3">C#3</option>
+        <option value="D3">D3</option>
+        <option value="D#3">D#3</option>
+        <option value="E3">E3</option>
+        <option value="F3">F3</option>
+        <option value="F#3">F#3</option>
+        <option value="G3">G3</option>
+        <option value="G#3">G#3</option>
+        <option value="A3">A3</option>
+        <option value="A#3">A#3</option>
+        <option value="B3">B3</option>
+        <option value="C4">C4</option>
+        <option value="C#4">C#4</option>
+        <option value="D4">D4</option>
+        <option value="D#4">D#4</option>
+        <option value="E4">E4</option>
+        <option value="F4">F4</option>
+        <option value="F#4">F#4</option>
+        <option value="G4">G4</option>
+        <option value="G#4">G#4</option>
+        <option value="A4" selected>A4</option>
+        <option value="A#4">A#4</option>
+        <option value="B4">B4</option>
+        <option value="C5">C5</option>
+        <option value="C#5">C#5</option>
+        <option value="D5">D5</option>
+        <option value="D#5">D#5</option>
+        <option value="E5">E5</option>
+        <option value="F5">F5</option>
+        <option value="F#5">F#5</option>
+        <option value="G5">G5</option>
+        <option value="G#5">G#5</option>
+        <option value="A5">A5</option>
+        <option value="A#5">A#5</option>
+        <option value="B5">B5</option>
+      </select></label>
+      <label>Tolerância (cents): <input id="toleranceCents" type="number" value="30" min="1" max="500" style="width:70px"></label>
+      <div><strong>Status alvo:</strong> <span id="targetMatch">—</span></div>
+    </div>
+    <div id="feedbackPanel" style="margin-top:12px">
+      <strong>Feedback em tempo real</strong>
+      <ul id="feedbackList" style="margin-top:6px"></ul>
+    </div>
+    <div id="sessionHistory" style="margin-top:12px">
+      <strong>Sessões salvas</strong>
+      <ul id="sessionList"></ul>
+    </div>
+  </div>
+
+  <div id="labelCollection" class="tool-section">
+    <h3>Coleta rotulada (dataset)</h3>
+    <div class="tool-row">
+      <button id="startLabelRec">Iniciar gravação rotulada</button>
+      <button id="stopLabelRec" disabled>Parar</button>
+      <label>Embocadura: <select id="labelEmb">
+        <option value="neutral">Neutra</option>
+        <option value="open">Aberta</option>
+        <option value="tight">Apertada</option>
+      </select></label>
+      <label>Fluxo: <select id="labelAir">
+        <option value="soft">Fraco</option>
+        <option value="medium">Médio</option>
+        <option value="strong">Forte</option>
+      </select></label>
+      <label>Efeito: <select id="labelEffect">
+        <option value="none">Nenhum</option>
+        <option value="vibrato">Vibrato</option>
+        <option value="scoop">Scoop</option>
+      </select></label>
+      <button id="saveLabeledSample" disabled>Salvar amostra</button>
+      <button id="exportDataset">Exportar dataset (JSON)</button>
+    </div>
+    <ul id="labeledList" style="margin-top:8px"></ul>
+  </div>
+
+  <div id="downloads">
+    <h3>Gravações</h3>
+    <ul id="dlList"></ul>
+  </div>
+
+  <div id="suggestions">
+    <h3>Sugestões</h3>
+    <ul id="suggestList"></ul>
+  </div>
+
+  <div>
+    <h3>Análise da gravação</h3>
+    <ul id="recordingAnalysis"></ul>
+  </div>
+
+  </div>
+  <script src="/static/app/audio.js"></script>
+</body>
+</html>

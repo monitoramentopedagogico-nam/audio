@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Dashboard do Professor</h1>
+<p>Todas as amostras rotuladas</p>
+<table>
+  <thead><tr><th>ID</th><th>Aluno</th><th>Data</th><th>Exercise</th><th>Labels</th><th>Audio</th></tr></thead>
+  <tbody>
+  {% for s in samples %}
+    <tr>
+      <td>{{ s.id }}</td>
+      <td>{{ s.user.username if s.user else 'anon' }}</td>
+      <td>{{ s.created_at }}</td>
+      <td>{{ s.exercise }}</td>
+      <td>{{ s.labels }}</td>
+      <td>{% if s.recording %}<a href="{{ s.recording.file.url }}">audio</a>{% endif %}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="6">Nenhuma amostra.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
