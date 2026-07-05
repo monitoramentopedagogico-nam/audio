@@ -1,0 +1,13 @@
+services:
+  web:
+    environment:
+      - POSTGRES_DB=sabe_local1
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=host.docker.internal
+      - POSTGRES_PORT=5432
+    depends_on: !reset []
+
+  https:
+    depends_on:
+      - web

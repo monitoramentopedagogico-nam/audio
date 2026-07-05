@@ -38,10 +38,40 @@ O projeto agora usa PostgreSQL via Docker Compose. As credenciais padrão são:
 - banco: `mydatabase`
 - usuário: `myuser`
 - senha: `mypassword`
-- host: `db`
-- porta: `5432`
+- host dentro do Docker: `db`
+- porta dentro do Docker: `5432`
+- host no computador local: `localhost`
+- porta no computador local: `5433`
 
 Se quiser alterar essas variáveis, edite `docker-compose.yml`.
+
+### Usar PostgreSQL 18 local do Windows
+
+Para usar o banco `sabe_local1` do PostgreSQL instalado no Windows, defina a senha do usuário `postgres` e suba o app com o override:
+
+```powershell
+$env:POSTGRES_PASSWORD="sua-senha-do-postgres"
+docker compose -f docker-compose.yml -f docker-compose.local-postgres.yml up -d --build web https
+```
+
+Nessa configuração, o app usa:
+
+- banco: `sabe_local1`
+- usuário: `postgres`
+- host visto pelo container: `host.docker.internal`
+- porta: `5432`
+
+Para gerar backup desse banco pelo Windows:
+
+```powershell
+& "C:\Program Files\PostgreSQL\18\bin\pg_dump.exe" -U postgres -Fc sabe_local1 -f backupled.dump
+```
+
+Depois de apontar para um banco novo, aplique as migrações:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.local-postgres.yml run --rm web python manage.py migrate
+```
 
 ## Deploy no Easypanel
 
