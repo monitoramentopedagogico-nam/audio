@@ -104,6 +104,7 @@ const labelCollection = document.getElementById('labelCollection');
 const downloads = document.getElementById('downloads');
 const suggestions = document.getElementById('suggestions');
 const stageButtons = Array.from(document.querySelectorAll('[data-stage-target]'));
+const dashboardPage = document.querySelector('.dashboard-page');
 
 function resizeCanvas(){ canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; }
 window.addEventListener('resize', resizeCanvas);
@@ -747,6 +748,7 @@ function setBeginnerStartButtonListening(isListening){
   if(!beginnerStartBtn) return;
   beginnerStartBtn.classList.toggle('is-listening', isListening);
   beginnerStartBtn.textContent = isListening ? '[ \u25b6 OUVINDO ]' : '[ \u25b6 TOCAR ]';
+  if(dashboardPage) dashboardPage.classList.toggle('practice-active', isListening);
 }
 
 function startBeginnerPractice(){
