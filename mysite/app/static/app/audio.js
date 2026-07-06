@@ -9,6 +9,7 @@ let lastDetectedNote = null;
 let noteDisplay = null;
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
+const controls = document.getElementById('controls');
 const monitor = document.getElementById('monitor');
 const meterFill = document.querySelector('#meter>div');
 const canvas = document.getElementById('spectrum');
@@ -24,10 +25,12 @@ const pitchSummary = document.getElementById('pitchSummary');
 const centsSummary = document.getElementById('centsSummary');
 const targetSummary = document.getElementById('targetSummary');
 const tuningMeter = document.getElementById('tuningMeter');
+const tuningRow = document.getElementById('tuningRow');
 const tuningNeedle = document.getElementById('tuningNeedle');
 const stabilityLabel = document.getElementById('stability');
 const recordingAnalysis = document.getElementById('recordingAnalysis');
 const listenRef = document.getElementById('listenRef');
+const reference = document.getElementById('reference');
 const scoreContainer = document.getElementById('scoreContainer');
 const exportMusicXMLBtn = document.getElementById('exportMusicXMLBtn');
 const exportMidiBtn = document.getElementById('exportMidiBtn');
@@ -94,6 +97,11 @@ const renderLyricMelodyBtn = document.getElementById('renderLyricMelodyBtn');
 const playLyricMelodyBtn = document.getElementById('playLyricMelodyBtn');
 const practiceLyricMelodyBtn = document.getElementById('practiceLyricMelodyBtn');
 const lyricMelodyOutput = document.getElementById('lyricMelodyOutput');
+const exercises = document.getElementById('exercises');
+const labelCollection = document.getElementById('labelCollection');
+const downloads = document.getElementById('downloads');
+const suggestions = document.getElementById('suggestions');
+const stageButtons = Array.from(document.querySelectorAll('[data-stage-target]'));
 
 function resizeCanvas(){ canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; }
 window.addEventListener('resize', resizeCanvas);
@@ -110,6 +118,60 @@ function updateDashboardSummary(note, pitch, centsText){
     targetSummary.textContent = target;
   }
 }
+
+function compactStageElements(){
+  const allAdvanced = advancedTools ? Array.from(advancedTools.children) : [];
+  const scorePanel = scoreContainer ? scoreContainer.parentElement : null;
+  const pitchPanel = pitchLabel ? pitchLabel.parentElement : null;
+  const notePanel = document.getElementById('currentNote') ? document.getElementById('currentNote').parentElement : null;
+  const realtimeTitle = document.getElementById('realtime') ? document.getElementById('realtime').previousElementSibling : null;
+  const recordingPanel = recordingAnalysis ? recordingAnalysis.parentElement : null;
+  return {
+    allAdvanced,
+    stages: {
+      beginner: [document.getElementById('beginnerPanel')],
+      arrangement: [arrangementBuilder],
+      melody: [lyricMelodyBuilder],
+      live: [
+        controls,
+        meterFill ? meterFill.parentElement : null,
+        canvas,
+        realtimeTitle,
+        document.getElementById('realtime'),
+        pitchPanel,
+        notePanel,
+        tuningRow,
+        scorePanel,
+        reference,
+      ],
+      history: [exercises, labelCollection, downloads, suggestions, recordingPanel],
+    },
+  };
+}
+
+function showAppStage(stageName){
+  const {allAdvanced, stages} = compactStageElements();
+  const beginnerPanel = document.getElementById('beginnerPanel');
+  if(beginnerPanel) beginnerPanel.classList.add('stage-hidden');
+  allAdvanced.forEach(el => el.classList.add('stage-hidden'));
+  const activeStage = stages[stageName] || stages.beginner;
+  activeStage.forEach(el => {
+    if(el) el.classList.remove('stage-hidden');
+  });
+  if(advancedTools){
+    advancedTools.classList.toggle('stage-hidden', stageName === 'beginner');
+  }
+  stageButtons.forEach(btn => {
+    const active = btn.dataset.stageTarget === stageName;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  resizeCanvas();
+}
+
+stageButtons.forEach(btn => {
+  btn.addEventListener('click', () => showAppStage(btn.dataset.stageTarget || 'beginner'));
+});
 
 let pitchHistory = [];
 let workletNode, recordedFrames = [], recordingFlag = false;
@@ -2955,3 +3017,4 @@ if (listenRef) {
   });
 }
 updateDashboardSummary('', null, '');
+showAppStage('beginner');
