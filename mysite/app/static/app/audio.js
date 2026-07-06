@@ -83,6 +83,7 @@ const advancedTools = document.getElementById('advancedTools');
 const chordSheetUrl = document.getElementById('chordSheetUrl');
 const fetchChordSheetBtn = document.getElementById('fetchChordSheetBtn');
 const chordSheetInput = document.getElementById('chordSheetInput');
+const arrangementBuilder = document.getElementById('arrangementBuilder');
 const arrangementBpm = document.getElementById('arrangementBpm');
 const arrangementStyle = document.getElementById('arrangementStyle');
 const analyzeChordSheetBtn = document.getElementById('analyzeChordSheetBtn');
@@ -92,6 +93,7 @@ const arrangementSummary = document.getElementById('arrangementSummary');
 const arrangementChords = document.getElementById('arrangementChords');
 const arrangementNotes = document.getElementById('arrangementNotes');
 const melodicCipher = document.getElementById('melodicCipher');
+const lyricMelodyBuilder = document.getElementById('lyricMelodyBuilder');
 const lyricMelodyInput = document.getElementById('lyricMelodyInput');
 const renderLyricMelodyBtn = document.getElementById('renderLyricMelodyBtn');
 const playLyricMelodyBtn = document.getElementById('playLyricMelodyBtn');
@@ -750,7 +752,7 @@ function startBeginnerPractice(){
   if(step && step.mode === 'timer'){
     startBeginnerTimer(step);
   } else {
-    if(startBtn && !startBtn.disabled) start();
+    if(!audioCtx || !analyser) start();
     if((step && step.metronome) || (beginnerExercise && beginnerExercise.value === 'with_metronome')){
       if(!metronomeIntervalId) startMetronome();
     }
@@ -1550,8 +1552,17 @@ function start(){
     // route processed signal (hp -> gain) for monitoring/recording
     if(monitor.checked){ gainNode.connect(audioCtx.destination); }
   }).catch(err=>{
-    alert('Erro ao acessar microfone: '+err.message);
-    startBtn.disabled=false; stopBtn.disabled=true;
+    const message = err && err.name === 'NotAllowedError'
+      ? 'Permita o uso do microfone no navegador e toque em Comecar novamente.'
+      : 'Nao consegui acessar o microfone. Use HTTPS/local seguro e verifique a permissao.';
+    console.error('microphone access failed', err);
+    setBeginnerStatus('bad', 'Microfone bloqueado', message);
+    alert('Erro ao acessar microfone: '+(err && err.message ? err.message : 'permissao negada'));
+    if(startBtn) startBtn.disabled=false;
+    if(stopBtn) stopBtn.disabled=true;
+    if(beginnerStartBtn) beginnerStartBtn.disabled=false;
+    if(beginnerStopBtn) beginnerStopBtn.disabled=true;
+    beginnerActive = false;
     calibrationMode = null;
     if(calibrateMicBtn) calibrateMicBtn.disabled = false;
     if(calibrationStatus) calibrationStatus.textContent = 'Falha ao acessar o microfone.';
