@@ -749,10 +749,10 @@ function startBeginnerPractice(){
   if(beginnerStartBtn) beginnerStartBtn.disabled = true;
   if(beginnerStopBtn) beginnerStopBtn.disabled = false;
   const step = currentGuidedStep();
+  if(!audioCtx || !analyser) start();
   if(step && step.mode === 'timer'){
     startBeginnerTimer(step);
   } else {
-    if(!audioCtx || !analyser) start();
     if((step && step.metronome) || (beginnerExercise && beginnerExercise.value === 'with_metronome')){
       if(!metronomeIntervalId) startMetronome();
     }
