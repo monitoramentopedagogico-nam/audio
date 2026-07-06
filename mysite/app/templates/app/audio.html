@@ -172,23 +172,6 @@
       border-color:var(--accent);
       color:#fff;
     }
-    #beginnerStartBtn{
-      background:var(--accent);
-      border-color:var(--accent);
-      color:#fff;
-      font-weight:800;
-    }
-    #beginnerStartBtn:hover:not(:disabled){
-      background:var(--accent-strong);
-      border-color:var(--accent-strong);
-    }
-    #beginnerStartBtn.is-listening,
-    #beginnerStartBtn.is-listening:disabled{
-      background:#12394f;
-      border-color:#12394f;
-      color:#fff;
-      opacity:1;
-    }
     .stage-hidden{display:none!important}
     #beginnerPanel{
       border-color:#cfe1d5;
@@ -213,6 +196,46 @@
       font-weight:700;
     }
     #beginnerControls select,#beginnerControls input,#perceptionControls select{width:100%;padding:7px}
+    .practice-play-panel{
+      display:grid;
+      grid-template-columns:minmax(150px,1.2fr) repeat(5,minmax(96px,1fr));
+      gap:8px;
+      align-items:stretch;
+      margin:12px 0;
+      padding:10px;
+      border:1px solid #cfe1d5;
+      border-radius:8px;
+      background:#f9fcfa;
+    }
+    .practice-play-panel button{
+      min-height:52px;
+      font-weight:800;
+    }
+    #beginnerStartBtn{
+      background:var(--accent);
+      border-color:var(--accent);
+      color:#fff;
+      font-size:17px;
+    }
+    #beginnerStartBtn:hover:not(:disabled){
+      background:var(--accent-strong);
+      border-color:var(--accent-strong);
+    }
+    #beginnerStartBtn.is-listening,
+    #beginnerStartBtn.is-listening:disabled{
+      background:#12394f;
+      border-color:#12394f;
+      color:#fff;
+      opacity:1;
+    }
+    #beginnerStopBtn{border-color:#d7a4a4;color:#8f1d1d}
+    #beginnerRepeatBtn,#beginnerReferenceBtn,#beginnerMetronomeBtn,#calibrateMicBtn{background:#fff}
+    .play-panel-status{
+      grid-column:1 / -1;
+      color:var(--muted);
+      font-size:13px;
+      padding:2px 4px 0;
+    }
     .perception-hidden{display:none!important}
     #beginnerSignal{
       display:grid;
@@ -241,7 +264,7 @@
     #beginnerMessage{font-size:18px;margin-bottom:10px;color:#172033}
     #beginnerProgress{height:16px;background:#e2e8f0;border-radius:8px;overflow:hidden}
     #beginnerProgressFill{height:100%;width:0;background:#247a3b;transition:width .12s linear}
-    #beginnerRoutine,#calibrationPanel{
+    #beginnerRoutine{
       border-top:1px solid #d6e5dc;
       margin-top:14px;
       padding-top:14px;
@@ -375,9 +398,18 @@
         padding:8px;
         font-size:14px;
       }
+      .practice-play-panel{
+        grid-template-columns:1fr 1fr;
+        padding:8px;
+      }
+      #beginnerStartBtn{
+        grid-column:1 / -1;
+        min-height:56px;
+      }
+      .play-panel-status{grid-column:1 / -1}
       #beginnerControls,#perceptionControls,#controls,.tool-row{display:grid;grid-template-columns:1fr;gap:8px;align-items:stretch}
       #beginnerControls label,#perceptionControls label{width:100%;min-width:0}
-      #beginnerControls button,#controls button,.tool-row button,#advancedToggle,#calibrationPanel button{width:100%}
+      #beginnerControls button,#controls button,.tool-row button,#advancedToggle{width:100%}
       #beginnerSignal{grid-template-columns:1fr}
       #beginnerLight{min-height:96px;font-size:20px}
       #beginnerMessage{font-size:16px}
@@ -459,11 +491,15 @@
       <label>BPM
         <input id="beginnerBpm" type="number" value="60" min="30" max="240">
       </label>
+    </div>
+    <div class="practice-play-panel" aria-label="Controles de estudo">
       <button id="beginnerStartBtn" type="button">Come&ccedil;ar</button>
       <button id="beginnerStopBtn" type="button" disabled>Parar</button>
       <button id="beginnerRepeatBtn" type="button">Repetir</button>
       <button id="beginnerReferenceBtn" type="button">Ouvir refer&ecirc;ncia</button>
       <button id="beginnerMetronomeBtn" type="button">Metr&ocirc;nomo</button>
+      <button id="calibrateMicBtn" type="button">Calibrar</button>
+      <div class="play-panel-status" id="calibrationStatus">Calibra&ccedil;&atilde;o recomendada no celular.</div>
     </div>
     <div id="perceptionControls" class="perception-hidden">
       <label>Tom
@@ -511,10 +547,6 @@
         </select>
       </label>
       <button id="worshipSaxReferenceBtn" type="button">Ouvir como sax</button>
-    </div>
-    <div id="calibrationPanel">
-      <button id="calibrateMicBtn" type="button">Calibrar microfone</button>
-      <span id="calibrationStatus">Calibra&ccedil;&atilde;o recomendada no celular.</span>
     </div>
     <div id="beginnerRoutine">
       <div id="routineStepTitle">Rotina Nivel 1</div>
