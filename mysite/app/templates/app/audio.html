@@ -154,7 +154,7 @@
       top:0;
       z-index:20;
       display:grid;
-      grid-template-columns:repeat(5,minmax(0,1fr));
+      grid-template-columns:repeat(4,minmax(0,1fr));
       gap:8px;
       background:rgba(238,242,245,.96);
       padding:8px 0;
@@ -171,6 +171,23 @@
       background:var(--accent);
       border-color:var(--accent);
       color:#fff;
+    }
+    #beginnerStartBtn{
+      background:var(--accent);
+      border-color:var(--accent);
+      color:#fff;
+      font-weight:800;
+    }
+    #beginnerStartBtn:hover:not(:disabled){
+      background:var(--accent-strong);
+      border-color:var(--accent-strong);
+    }
+    #beginnerStartBtn.is-listening,
+    #beginnerStartBtn.is-listening:disabled{
+      background:#12394f;
+      border-color:#12394f;
+      color:#fff;
+      opacity:1;
     }
     .stage-hidden{display:none!important}
     #beginnerPanel{
@@ -408,7 +425,6 @@
           <button class="stage-button is-active" type="button" data-stage-target="beginner">Modo iniciante</button>
           <button class="stage-button" type="button" data-stage-target="arrangement">Arranjo por cifra</button>
           <button class="stage-button" type="button" data-stage-target="melody">Cifra mel&oacute;dica</button>
-          <button class="stage-button" type="button" data-stage-target="live">Ao vivo</button>
           <button class="stage-button" type="button" data-stage-target="history">Registros</button>
         </nav>
 

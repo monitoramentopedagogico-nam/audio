@@ -128,25 +128,25 @@ function compactStageElements(){
   const notePanel = document.getElementById('currentNote') ? document.getElementById('currentNote').parentElement : null;
   const realtimeTitle = document.getElementById('realtime') ? document.getElementById('realtime').previousElementSibling : null;
   const recordingPanel = recordingAnalysis ? recordingAnalysis.parentElement : null;
+  const livePanels = [
+    meterFill ? meterFill.parentElement : null,
+    canvas,
+    realtimeTitle,
+    document.getElementById('realtime'),
+    pitchPanel,
+    notePanel,
+    tuningRow,
+    scorePanel,
+    reference,
+  ];
   return {
     allAdvanced,
     stages: {
-      beginner: [document.getElementById('beginnerPanel')],
+      beginner: [document.getElementById('beginnerPanel'), ...livePanels],
       arrangement: [arrangementBuilder],
       melody: [lyricMelodyBuilder],
-      live: [
-        controls,
-        meterFill ? meterFill.parentElement : null,
-        canvas,
-        realtimeTitle,
-        document.getElementById('realtime'),
-        pitchPanel,
-        notePanel,
-        tuningRow,
-        scorePanel,
-        reference,
-      ],
-      history: [exercises, labelCollection, downloads, suggestions, recordingPanel],
+      live: livePanels,
+      history: [controls, exercises, labelCollection, downloads, suggestions, recordingPanel],
     },
   };
 }
@@ -161,7 +161,8 @@ function showAppStage(stageName){
     if(el) el.classList.remove('stage-hidden');
   });
   if(advancedTools){
-    advancedTools.classList.toggle('stage-hidden', stageName === 'beginner');
+    const usesAdvanced = activeStage.some(el => allAdvanced.includes(el));
+    advancedTools.classList.toggle('stage-hidden', !usesAdvanced);
   }
   stageButtons.forEach(btn => {
     const active = btn.dataset.stageTarget === stageName;
@@ -742,11 +743,18 @@ function showBeginnerPerformance(step, reason){
   setBeginnerStatus(result.kind, result.label, result.message);
 }
 
+function setBeginnerStartButtonListening(isListening){
+  if(!beginnerStartBtn) return;
+  beginnerStartBtn.classList.toggle('is-listening', isListening);
+  beginnerStartBtn.textContent = isListening ? 'Ouvindo...' : 'Come\u00e7ar';
+}
+
 function startBeginnerPractice(){
   syncBeginnerControls();
   resetBeginnerProgress();
   beginnerActive = true;
   if(beginnerStartBtn) beginnerStartBtn.disabled = true;
+  setBeginnerStartButtonListening(true);
   if(beginnerStopBtn) beginnerStopBtn.disabled = false;
   const step = currentGuidedStep();
   if(!audioCtx || !analyser) start();
@@ -766,6 +774,7 @@ function stopBeginnerPractice(){
   beginnerHoldStart = null;
   stopBeginnerTimer();
   if(beginnerStartBtn) beginnerStartBtn.disabled = false;
+  setBeginnerStartButtonListening(false);
   if(beginnerStopBtn) beginnerStopBtn.disabled = true;
   if(stopBtn && !stopBtn.disabled) stop();
   showBeginnerPerformance(step, 'stopped');
@@ -802,6 +811,7 @@ function startBeginnerTimer(step){
     if(elapsed >= step.seconds){
       stopBeginnerTimer();
       if(beginnerStartBtn) beginnerStartBtn.disabled = false;
+      setBeginnerStartButtonListening(false);
       if(beginnerStopBtn) beginnerStopBtn.disabled = true;
       beginnerActive = false;
       showBeginnerPerformance(step, 'completed');
@@ -1561,6 +1571,7 @@ function start(){
     if(startBtn) startBtn.disabled=false;
     if(stopBtn) stopBtn.disabled=true;
     if(beginnerStartBtn) beginnerStartBtn.disabled=false;
+    setBeginnerStartButtonListening(false);
     if(beginnerStopBtn) beginnerStopBtn.disabled=true;
     beginnerActive = false;
     calibrationMode = null;
