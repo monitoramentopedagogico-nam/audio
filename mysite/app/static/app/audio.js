@@ -746,7 +746,7 @@ function showBeginnerPerformance(step, reason){
 function setBeginnerStartButtonListening(isListening){
   if(!beginnerStartBtn) return;
   beginnerStartBtn.classList.toggle('is-listening', isListening);
-  beginnerStartBtn.textContent = isListening ? 'Ouvindo...' : 'Come\u00e7ar';
+  beginnerStartBtn.textContent = isListening ? '[ \u25b6 OUVINDO ]' : '[ \u25b6 TOCAR ]';
 }
 
 function startBeginnerPractice(){
@@ -931,7 +931,7 @@ async function playReferenceSequence(sequence, bpm){
 }
 
 function updateBeginnerMetronomeButton(){
-  if(beginnerMetronomeBtn) beginnerMetronomeBtn.textContent = metronomeIntervalId ? 'Parar metr\u00f4nomo' : 'Metr\u00f4nomo';
+  if(beginnerMetronomeBtn) beginnerMetronomeBtn.textContent = metronomeIntervalId ? '[ \u266a METR\u00d4NOMO ON ]' : '[ \u2669 METR\u00d4NOMO ]';
 }
 
 function updateBeginnerPanel(pitch, rms){
