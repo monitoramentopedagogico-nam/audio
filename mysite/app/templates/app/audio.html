@@ -7,7 +7,7 @@
   <style>
     *{box-sizing:border-box}
     :root{
-      --bg:#eef2f5;
+      --bg:#edf4f2;
       --surface:#fff;
       --surface-soft:#f8fafc;
       --line:#d9e2ec;
@@ -15,6 +15,7 @@
       --muted:#64748b;
       --accent:#237a57;
       --accent-strong:#155e42;
+      --gold:#c9912d;
       --warning:#f59e0b;
       --danger:#c62828;
       --ink:#0f172a;
@@ -53,11 +54,39 @@
     p{color:var(--muted);line-height:1.45}
     .dashboard-page{min-height:100vh}
     .dashboard-header{
-      background:#12394f;
+      position:relative;
+      overflow:hidden;
+      background:
+        linear-gradient(135deg,rgba(18,57,79,.96),rgba(31,91,86,.94)),
+        repeating-linear-gradient(0deg,rgba(255,255,255,.18) 0 1px,transparent 1px 14px);
       color:#fff;
-      padding:22px clamp(14px,3vw,32px);
-      border-bottom:4px solid #2bb673;
+      padding:24px clamp(14px,3vw,32px);
+      border-bottom:4px solid var(--gold);
     }
+    .dashboard-header::after{
+      content:"\1D11E";
+      position:absolute;
+      right:clamp(12px,5vw,64px);
+      top:50%;
+      transform:translateY(-50%);
+      font-family:"Times New Roman",serif;
+      font-size:clamp(86px,16vw,172px);
+      line-height:1;
+      color:rgba(255,255,255,.14);
+      pointer-events:none;
+    }
+    .header-content{position:relative;z-index:1;max-width:760px}
+    .header-kicker{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      color:#ffe5a8;
+      font-size:13px;
+      font-weight:800;
+      text-transform:uppercase;
+      margin-bottom:8px;
+    }
+    .header-kicker::before{content:"\1D11E";font-family:"Times New Roman",serif;font-size:24px;line-height:.8}
     .dashboard-header h1{color:#fff;margin-bottom:6px}
     .dashboard-header p{color:#d7e4ec;margin:0}
     .dashboard-shell{
@@ -94,6 +123,30 @@
       border-radius:8px;
       padding:12px;
     }
+    .encouragement-card{
+      border-color:#ead6aa;
+      background:linear-gradient(180deg,#fffaf0 0%,#fff 100%);
+    }
+    .clef-mark{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      color:#8a5b12;
+      font-weight:800;
+    }
+    .clef-symbol{
+      width:46px;
+      height:58px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border:1px solid #e8cf98;
+      border-radius:8px;
+      background:#fff8e8;
+      font-family:"Times New Roman",serif;
+      font-size:44px;
+      line-height:1;
+    }
     .status-label{font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:700}
     .status-value{font-size:20px;font-weight:700;margin-top:8px;color:var(--ink)}
     .app-stage-nav{
@@ -122,7 +175,9 @@
     .stage-hidden{display:none!important}
     #beginnerPanel{
       border-color:#cfe1d5;
-      background:linear-gradient(180deg,#fbfffc 0%,#f5fbf7 100%);
+      background:
+        linear-gradient(180deg,#fbfffc 0%,#f5fbf7 100%),
+        repeating-linear-gradient(0deg,transparent 0 13px,rgba(35,122,87,.08) 13px 14px);
     }
     #beginnerPanel h2{margin-bottom:14px}
     #beginnerControls,#perceptionControls,#controls,.tool-row{
@@ -289,6 +344,7 @@
     }
     @media (max-width:700px){
       .dashboard-header{padding:18px 12px}
+      .dashboard-header::after{font-size:92px;right:-4px;opacity:.8}
       .dashboard-shell{padding:10px;gap:10px}
       .dashboard-card,#beginnerPanel,.tool-section,#advancedTools > div:not(#controls),#reference,#downloads,#suggestions{padding:12px}
       .status-grid{grid-template-columns:1fr}
@@ -320,8 +376,11 @@
 <body>
   <div class="dashboard-page">
     <header class="dashboard-header">
-      <h1>Dashboard de estudo do sax</h1>
-      <p>Pratique com nota alvo, refer&ecirc;ncia sonora, metr&ocirc;nomo e feedback em tempo real.</p>
+      <div class="header-content">
+        <div class="header-kicker">Estudo guiado</div>
+        <h1>Sax todos os dias</h1>
+        <p>Toque com calma, escute a refer&ecirc;ncia e avance uma nota por vez.</p>
+      </div>
     </header>
 
     <div class="dashboard-shell">
@@ -693,6 +752,13 @@
       </main>
 
       <aside class="dashboard-side">
+        <section class="dashboard-card encouragement-card">
+          <div class="clef-mark">
+            <span class="clef-symbol">&#119070;</span>
+            <div>Respire, escute e toque com const&acirc;ncia.</div>
+          </div>
+          <p>Cada sess&atilde;o curta bem feita fortalece som, afina&ccedil;&atilde;o e confian&ccedil;a.</p>
+        </section>
         <section class="dashboard-card">
           <h3>Fluxo de estudo</h3>
           <p>Escolha o exerc&iacute;cio, ou&ccedil;a a refer&ecirc;ncia e toque uma nota por vez at&eacute; o indicador ficar verde.</p>
