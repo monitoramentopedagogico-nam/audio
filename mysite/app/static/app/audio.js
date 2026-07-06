@@ -601,9 +601,32 @@ function syncBeginnerControls(){
 function setBeginnerStatus(kind, label, message){
   if(beginnerLight){
     beginnerLight.className = kind || 'ready';
-    beginnerLight.textContent = label || 'Pronto';
+    beginnerLight.innerHTML = '';
+    if(label === 'Repita'){
+      const repeatButton = document.createElement('button');
+      repeatButton.type = 'button';
+      repeatButton.className = 'repeat-action';
+      repeatButton.textContent = 'Repita';
+      repeatButton.addEventListener('click', repeatBeginnerPractice);
+      beginnerLight.appendChild(repeatButton);
+    } else {
+      beginnerLight.textContent = label || 'Pronto';
+    }
   }
-  if(beginnerMessage && message) beginnerMessage.textContent = message;
+  if(beginnerMessage && message){
+    beginnerMessage.innerHTML = '';
+    if(label === 'Repita' && message.startsWith('Repita')){
+      const repeatButton = document.createElement('button');
+      repeatButton.type = 'button';
+      repeatButton.className = 'repeat-message-action';
+      repeatButton.textContent = 'Repita';
+      repeatButton.addEventListener('click', repeatBeginnerPractice);
+      beginnerMessage.appendChild(repeatButton);
+      beginnerMessage.appendChild(document.createTextNode(message.slice('Repita'.length)));
+    } else {
+      beginnerMessage.textContent = message;
+    }
+  }
 }
 
 function loadMicCalibration(){
