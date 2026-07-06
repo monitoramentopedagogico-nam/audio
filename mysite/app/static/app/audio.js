@@ -19,6 +19,10 @@ const recStop = document.getElementById('recStop');
 const dlList = document.getElementById('dlList');
 const pitchLabel = document.getElementById('pitch');
 const centsLabel = document.getElementById('cents');
+const currentNoteSummary = document.getElementById('currentNoteSummary');
+const pitchSummary = document.getElementById('pitchSummary');
+const centsSummary = document.getElementById('centsSummary');
+const targetSummary = document.getElementById('targetSummary');
 const tuningMeter = document.getElementById('tuningMeter');
 const tuningNeedle = document.getElementById('tuningNeedle');
 const stabilityLabel = document.getElementById('stability');
@@ -94,6 +98,18 @@ const lyricMelodyOutput = document.getElementById('lyricMelodyOutput');
 function resizeCanvas(){ canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
+
+function updateDashboardSummary(note, pitch, centsText){
+  if(currentNoteSummary) currentNoteSummary.textContent = note || '--';
+  if(pitchSummary) pitchSummary.textContent = pitch ? pitch.toFixed(1) : '--';
+  if(centsSummary) centsSummary.textContent = centsText || '--';
+  if(targetSummary){
+    const target = beginnerTargetNote && beginnerTargetNote.value
+      ? beginnerTargetNote.value
+      : (targetNoteSelect && targetNoteSelect.value ? targetNoteSelect.value : 'Iniciante');
+    targetSummary.textContent = target;
+  }
+}
 
 let pitchHistory = [];
 let workletNode, recordedFrames = [], recordingFlag = false;
@@ -953,6 +969,7 @@ if(beginnerInstrument) beginnerInstrument.addEventListener('change', ()=>{
     currentArrangement.writtenKey = currentArrangement.originalKey ? transposedWrittenKeyForInstrument(currentArrangement.originalKey) : '';
     renderArrangement(currentArrangement);
   }
+  updateDashboardSummary('', currentEstimatedPitch, centsLabel ? centsLabel.textContent : '');
   setBeginnerStatus('ready', 'Instrumento', `${getInstrumentLabel()} selecionado. A referencia e a afinacao usam a transposicao correta.`);
 });
 if(beginnerTargetNote) beginnerTargetNote.addEventListener('change', ()=>{
@@ -967,6 +984,7 @@ if(beginnerTargetNote) beginnerTargetNote.addEventListener('change', ()=>{
   setManualBeginnerMode();
   syncBeginnerControls();
   resetBeginnerProgress();
+  updateDashboardSummary('', currentEstimatedPitch, centsLabel ? centsLabel.textContent : '');
   setBeginnerStatus('ready', 'Manual', `Alvo definido para ${beginnerTargetNote.value}. Ou\u00e7a a refer\u00eancia e tente manter verde.`);
 });
 if(beginnerBpm) beginnerBpm.addEventListener('change', ()=>{
@@ -989,6 +1007,7 @@ if(beginnerExercise) beginnerExercise.addEventListener('change', ()=>{
   updatePerceptionControlsVisibility();
   syncBeginnerControls();
   resetBeginnerProgress();
+  updateDashboardSummary('', currentEstimatedPitch, centsLabel ? centsLabel.textContent : '');
   if(isRoutineMode()){
     applyRoutineStep();
     if(document.getElementById('beginnerRoutine')) document.getElementById('beginnerRoutine').style.display = '';
@@ -1426,6 +1445,11 @@ function start(){
           if(stabilityLabel) stabilityLabel.textContent = stable === null ? '—' : (stable ? 'estável' : 'instável');
           const currentNoteEl = document.getElementById('currentNote');
           if(currentNoteEl) currentNoteEl.textContent = centsInfo ? centsInfo.note : (detectNoteFromPitch(currentEstimatedPitch, rms) || '—');
+          updateDashboardSummary(
+            currentNoteEl ? currentNoteEl.textContent : '',
+            currentEstimatedPitch,
+            centsLabel ? centsLabel.textContent : ''
+          );
         } catch(e){ console.error('tuning UI update failed', e); }
 
         // check target match
@@ -2930,3 +2954,4 @@ if (listenRef) {
     window.open('https://www.youtube.com/watch?v=ONOvKWES7f8&list=RDMM&start_radio=1&rv=tWAW7ZLkKh0', '_blank', 'noopener');
   });
 }
+updateDashboardSummary('', null, '');

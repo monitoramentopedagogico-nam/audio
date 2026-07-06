@@ -5,112 +5,312 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Captação de Sax - Live</title>
   <style>
-    body{font-family:Arial,Helvetica,sans-serif;padding:16px}
-    #controls{margin-bottom:12px}
-    #meter{width:300px;height:24px;background:#222;border-radius:4px;overflow:hidden}
-    #meter>div{height:100%;background:#4caf50;width:0}
-    canvas{width:100%;height:120px;background:#111;display:block}
-    #suggestions{margin-top:12px}
-    #scoreContainer{margin-top:12px;padding:12px;border:1px solid #ddd;border-radius:8px;background:#fff;min-height:140px;box-sizing:border-box}
-    #scoreContainer svg{width:100%;max-width:620px;height:auto;display:block}
-    #noteTimeline{margin-top:8px;padding-left:20px}
-    #beginnerPanel{border:1px solid #d7e3d8;background:#f7fbf7;border-radius:8px;padding:14px;margin-bottom:14px}
-    #beginnerPanel h2{margin:0 0 10px;font-size:22px}
-    #beginnerControls{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
-    #beginnerControls label{display:flex;flex-direction:column;gap:4px;font-size:13px}
-    #beginnerControls select,#beginnerControls input{min-width:120px;padding:6px}
-    #beginnerControls button{padding:7px 10px}
-    #perceptionControls{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:0 0 12px}
-    #perceptionControls label{display:flex;flex-direction:column;gap:4px;font-size:13px}
-    #perceptionControls select{min-width:150px;padding:6px}
-    .perception-hidden{display:none!important}
-    #beginnerSignal{display:grid;grid-template-columns:minmax(150px,220px) 1fr;gap:14px;align-items:center}
-    #beginnerLight{height:120px;border-radius:8px;background:#9ca3af;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;font-size:22px;text-align:center}
-    #beginnerLight.ready{background:#607d8b}
-    #beginnerLight.good{background:#2e7d32}
-    #beginnerLight.close{background:#f9a825;color:#222}
-    #beginnerLight.bad{background:#c62828}
-    #beginnerMessage{font-size:18px;margin-bottom:8px}
-    #beginnerProgress{height:16px;background:#e5e7eb;border-radius:8px;overflow:hidden}
-    #beginnerProgressFill{height:100%;width:0;background:#2e7d32;transition:width .12s linear}
-    #beginnerRoutine{border-top:1px solid #d7e3d8;margin-top:12px;padding-top:12px}
-    #routineStepTitle{font-weight:bold;margin-bottom:6px}
-    #routineStepHelp{margin-bottom:8px;color:#374151}
-    #routineSequence{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
-    #routineSequence span{border:1px solid #cbd5e1;border-radius:6px;padding:5px 8px;background:#fff}
-    #routineSequence span.active{background:#2e7d32;color:#fff;border-color:#2e7d32}
-    #routineNav{display:flex;gap:8px;flex-wrap:wrap}
-    #calibrationPanel{border-top:1px solid #d7e3d8;margin-top:12px;padding-top:12px}
-    #calibrationPanel button{padding:7px 10px}
-    #calibrationStatus{margin-top:8px;color:#374151}
-    #advancedToggle{margin:4px 0 12px}
-    .advanced-hidden{display:none}
-    @media (max-width:640px){#beginnerSignal{grid-template-columns:1fr}#beginnerLight{height:92px}}
     *{box-sizing:border-box}
-    body{margin:0;background:#f5f7f6;color:#111827}
-    h1{font-size:clamp(24px,7vw,36px);line-height:1.1;margin:0 0 14px}
-    h2,h3{line-height:1.2}
-    button,select,input{font:inherit}
-    button{min-height:40px;border:1px solid #9ca3af;border-radius:6px;background:#fff;padding:8px 12px}
-    button:disabled{opacity:.55}
-    select,input{border:1px solid #9ca3af;border-radius:6px;background:#fff;min-height:40px}
-    #controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    #meter{width:100%;max-width:420px}
-    #beginnerControls label{flex:1 1 140px}
-    #beginnerControls select,#beginnerControls input{width:100%}
-    #perceptionControls label{flex:1 1 150px}
-    #perceptionControls select{width:100%}
-    #realtime>div{display:flex;gap:12px;flex-wrap:wrap}
-    #realtime>div>div{flex:1 1 160px;min-width:0}
-    #tuningRow{margin-top:6px}
-    #tuningMeterWrap{min-width:220px}
-    #tuningMeter{width:200px;max-width:100%}
-    .tool-section{margin-top:16px;border:1px solid #e0e0e0;padding:12px;border-radius:8px;background:#fff}
-    .tool-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+    :root{
+      --bg:#eef2f5;
+      --surface:#fff;
+      --surface-soft:#f8fafc;
+      --line:#d9e2ec;
+      --text:#172033;
+      --muted:#64748b;
+      --accent:#237a57;
+      --accent-strong:#155e42;
+      --warning:#f59e0b;
+      --danger:#c62828;
+      --ink:#0f172a;
+    }
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family:Arial,Helvetica,sans-serif;
+    }
+    button,select,input,textarea{font:inherit}
+    button{
+      min-height:40px;
+      border:1px solid #b7c3d0;
+      border-radius:6px;
+      background:#fff;
+      color:var(--ink);
+      padding:8px 12px;
+      cursor:pointer;
+    }
+    button:hover:not(:disabled){border-color:#7890a8;background:#f8fafc}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    select,input,textarea{
+      border:1px solid #b7c3d0;
+      border-radius:6px;
+      background:#fff;
+      min-height:40px;
+      color:var(--ink);
+    }
+    label{color:#334155}
+    canvas{width:100%;height:120px;background:#0b1020;border-radius:6px;display:block}
+    h1,h2,h3{line-height:1.15;margin:0;color:var(--ink);letter-spacing:0}
+    h1{font-size:clamp(26px,4vw,38px)}
+    h2{font-size:22px}
+    h3{font-size:18px;margin-bottom:12px}
+    p{color:var(--muted);line-height:1.45}
+    .dashboard-page{min-height:100vh}
+    .dashboard-header{
+      background:#12394f;
+      color:#fff;
+      padding:22px clamp(14px,3vw,32px);
+      border-bottom:4px solid #2bb673;
+    }
+    .dashboard-header h1{color:#fff;margin-bottom:6px}
+    .dashboard-header p{color:#d7e4ec;margin:0}
+    .dashboard-shell{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) minmax(280px,360px);
+      gap:16px;
+      padding:16px clamp(10px,3vw,28px) 28px;
+      align-items:start;
+    }
+    .dashboard-main,.dashboard-side{display:grid;gap:16px}
+    .dashboard-card,
+    #beginnerPanel,
+    .tool-section,
+    #advancedTools > div:not(#controls),
+    #advancedTools > section,
+    #reference,
+    #downloads,
+    #suggestions{
+      background:var(--surface);
+      border:1px solid var(--line);
+      border-radius:8px;
+      padding:16px;
+      box-shadow:0 1px 2px rgba(15,23,42,.05);
+    }
+    .status-grid{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:10px;
+    }
+    .status-card{
+      min-height:78px;
+      background:var(--surface);
+      border:1px solid var(--line);
+      border-radius:8px;
+      padding:12px;
+    }
+    .status-label{font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:700}
+    .status-value{font-size:20px;font-weight:700;margin-top:8px;color:var(--ink)}
+    #beginnerPanel{
+      border-color:#cfe1d5;
+      background:linear-gradient(180deg,#fbfffc 0%,#f5fbf7 100%);
+    }
+    #beginnerPanel h2{margin-bottom:14px}
+    #beginnerControls,#perceptionControls,#controls,.tool-row{
+      display:flex;
+      gap:10px;
+      align-items:end;
+      flex-wrap:wrap;
+    }
+    #beginnerControls{margin-bottom:12px}
+    #beginnerControls label,#perceptionControls label{
+      display:flex;
+      flex:1 1 145px;
+      flex-direction:column;
+      gap:5px;
+      font-size:13px;
+      font-weight:700;
+    }
+    #beginnerControls select,#beginnerControls input,#perceptionControls select{width:100%;padding:7px}
+    .perception-hidden{display:none!important}
+    #beginnerSignal{
+      display:grid;
+      grid-template-columns:minmax(150px,220px) 1fr;
+      gap:14px;
+      align-items:center;
+      margin-top:14px;
+    }
+    #beginnerLight{
+      min-height:128px;
+      border-radius:8px;
+      background:#64748b;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:#fff;
+      font-weight:800;
+      font-size:24px;
+      text-align:center;
+      padding:12px;
+    }
+    #beginnerLight.ready{background:#3f6474}
+    #beginnerLight.good{background:#247a3b}
+    #beginnerLight.close{background:var(--warning);color:#221b03}
+    #beginnerLight.bad{background:var(--danger)}
+    #beginnerMessage{font-size:18px;margin-bottom:10px;color:#172033}
+    #beginnerProgress{height:16px;background:#e2e8f0;border-radius:8px;overflow:hidden}
+    #beginnerProgressFill{height:100%;width:0;background:#247a3b;transition:width .12s linear}
+    #beginnerRoutine,#calibrationPanel{
+      border-top:1px solid #d6e5dc;
+      margin-top:14px;
+      padding-top:14px;
+    }
+    #routineStepTitle{font-weight:800;margin-bottom:6px}
+    #routineStepHelp,#calibrationStatus{color:var(--muted)}
+    #routineSequence{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+    #routineSequence span{
+      border:1px solid #cbd5e1;
+      border-radius:6px;
+      padding:6px 9px;
+      background:#fff;
+    }
+    #routineSequence span.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+    #routineNav{display:flex;gap:8px;flex-wrap:wrap}
+    .dashboard-toolbar{
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+    }
+    #advancedToggle{background:#12394f;color:#fff;border-color:#12394f}
+    .advanced-hidden{display:none!important}
+    #advancedTools{
+      display:grid;
+      grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);
+      gap:16px;
+      align-items:start;
+    }
+    #advancedTools > h1{display:none}
+    #controls{
+      grid-column:1 / -1;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:8px;
+      padding:12px;
+      margin:0;
+    }
+    #meter{
+      width:100%;
+      height:24px;
+      background:#111827;
+      border-radius:6px;
+      overflow:hidden;
+      margin:0;
+      border:0;
+      padding:0;
+      box-shadow:none;
+    }
+    #meter>div{height:100%;background:#35b36f;width:0}
+    #realtime>div{display:grid!important;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px}
+    #realtime>div>div{
+      min-width:0!important;
+      background:var(--surface-soft);
+      border:1px solid #e2e8f0;
+      border-radius:8px;
+      padding:10px;
+    }
+    #spectrogram{margin-top:10px!important}
+    #tuningRow{margin-top:0}
+    #tuningMeterWrap{min-width:220px;flex:1 1 240px}
+    #tuningMeter{width:100%!important;max-width:100%}
+    .tool-section{margin-top:0}
+    .tool-row{margin-top:10px}
     .tool-row:first-child{margin-top:0}
-    .tool-row label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-    .tool-row input[type="url"]{min-width:320px;flex:1;padding:8px}
-    #chordSheetInput{width:100%;margin-top:8px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;resize:vertical;font-family:Consolas,monospace}
+    .tool-row label{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-weight:700}
+    .tool-row input[type="url"]{min-width:280px;flex:1;padding:8px}
+    #chordSheetInput,#lyricMelodyInput{
+      width:100%;
+      margin-top:10px;
+      padding:10px;
+      border:1px solid #cbd5e1;
+      border-radius:8px;
+      resize:vertical;
+      font-family:Consolas,monospace;
+    }
     #arrangementSummary{margin-top:10px;color:#374151}
     #arrangementChords,#arrangementNotes{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-    #arrangementChords span,#arrangementNotes span{border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:5px 8px}
-    #melodicCipher{margin-top:12px;overflow-x:auto}
+    #arrangementChords span,#arrangementNotes span{
+      border:1px solid #cbd5e1;
+      border-radius:6px;
+      background:#fff;
+      padding:5px 8px;
+    }
+    #melodicCipher,#scoreContainer{max-width:100%;overflow-x:auto}
+    #melodicCipher{margin-top:12px}
     #melodicCipher table{width:100%;border-collapse:collapse;background:#fff}
     #melodicCipher th,#melodicCipher td{border:1px solid #cbd5e1;padding:8px;text-align:left;vertical-align:top}
     #melodicCipher th{background:#eef6ef}
     #melodicCipher td:nth-child(2){min-width:220px;white-space:normal}
-    #lyricMelodyInput{width:100%;margin-top:8px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;resize:vertical;font-family:Consolas,monospace}
-    #lyricMelodyOutput{margin-top:12px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:12px}
+    #lyricMelodyOutput{
+      margin-top:12px;
+      background:#fff;
+      border:1px solid #cbd5e1;
+      border-radius:8px;
+      padding:12px;
+    }
     .lyric-melody-line{margin:10px 0 16px;text-align:center}
     .lyric-melody-notes{font-family:Consolas,monospace;font-weight:700;color:#008000;white-space:pre-wrap}
     .lyric-melody-notes .strong{color:#ff6b00}
     .lyric-melody-text{font-size:20px;margin-top:4px;white-space:pre-wrap}
-    #scoreContainer{max-width:100%;overflow-x:auto}
+    #scoreContainer{
+      margin-top:10px;
+      padding:12px;
+      border:1px solid #ddd;
+      border-radius:8px;
+      background:#fff;
+      min-height:140px;
+    }
+    #scoreContainer svg{width:100%;max-width:620px;height:auto;display:block}
+    #noteTimeline,#feedbackList,#sessionList,#labeledList,#dlList,#suggestList,#recordingAnalysis{
+      margin:8px 0 0;
+      padding-left:20px;
+    }
+    @media (max-width:1080px){
+      .dashboard-shell,#advancedTools{grid-template-columns:1fr}
+      .status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    }
     @media (max-width:700px){
-      body{padding:10px}
-      #beginnerPanel{padding:10px;border-radius:0;margin-left:-10px;margin-right:-10px;border-left:0;border-right:0}
+      .dashboard-header{padding:18px 12px}
+      .dashboard-shell{padding:10px;gap:10px}
+      .dashboard-card,#beginnerPanel,.tool-section,#advancedTools > div:not(#controls),#reference,#downloads,#suggestions{padding:12px}
+      .status-grid{grid-template-columns:1fr}
       #beginnerControls,#perceptionControls,#controls,.tool-row{display:grid;grid-template-columns:1fr;gap:8px;align-items:stretch}
       #beginnerControls label,#perceptionControls label{width:100%;min-width:0}
       #beginnerControls button,#controls button,.tool-row button,#advancedToggle,#calibrationPanel button{width:100%}
       #beginnerSignal{grid-template-columns:1fr}
-      #beginnerLight{height:92px;font-size:20px}
+      #beginnerLight{min-height:96px;font-size:20px}
       #beginnerMessage{font-size:16px}
-      #routineSequence{gap:5px}
       #routineSequence span{flex:1 1 calc(50% - 5px);text-align:center;padding:8px 6px}
       #routineNav{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-      #calibrationPanel{display:grid;gap:8px}
-      #advancedTools{overflow-x:hidden}
-      #meter{max-width:none}
-      #realtime>div{display:grid!important;grid-template-columns:1fr}
-      #tuningMeterWrap{min-width:0}
-      #tuningMeter{width:100%}
+      #realtime>div{grid-template-columns:1fr!important}
       input[type="number"],select{width:100%!important}
+      .tool-row input[type="url"]{min-width:0;width:100%}
       canvas{height:96px}
     }
   </style>
 </head>
 <body>
-  <h1>Capta&ccedil;&atilde;o de Sax - Live</h1>
+  <div class="dashboard-page">
+    <header class="dashboard-header">
+      <h1>Dashboard de estudo do sax</h1>
+      <p>Pratique com nota alvo, refer&ecirc;ncia sonora, metr&ocirc;nomo e feedback em tempo real.</p>
+    </header>
+
+    <div class="dashboard-shell">
+      <main class="dashboard-main">
+        <section class="status-grid" aria-label="Resumo da pr&aacute;tica">
+          <div class="status-card">
+            <div class="status-label">Nota atual</div>
+            <div class="status-value"><span id="currentNoteSummary">--</span></div>
+          </div>
+          <div class="status-card">
+            <div class="status-label">Frequ&ecirc;ncia</div>
+            <div class="status-value"><span id="pitchSummary">--</span> Hz</div>
+          </div>
+          <div class="status-card">
+            <div class="status-label">Afina&ccedil;&atilde;o</div>
+            <div class="status-value"><span id="centsSummary">--</span></div>
+          </div>
+          <div class="status-card">
+            <div class="status-label">Objetivo</div>
+            <div class="status-value"><span id="targetSummary">Iniciante</span></div>
+          </div>
+        </section>
+
   <section id="beginnerPanel" aria-live="polite">
     <h2>Modo iniciante</h2>
     <div id="beginnerControls">
@@ -218,7 +418,9 @@
       </div>
     </div>
   </section>
-  <button id="advancedToggle" type="button">Mostrar ferramentas avan&ccedil;adas</button>
+  <div class="dashboard-toolbar">
+    <button id="advancedToggle" type="button">Mostrar ferramentas avan&ccedil;adas</button>
+  </div>
   <div id="advancedTools" class="advanced-hidden">
   <h1>Captação de Sax — Live</h1>
   <div id="controls">
@@ -445,6 +647,29 @@
     <ul id="recordingAnalysis"></ul>
   </div>
 
+  </div>
+      </main>
+
+      <aside class="dashboard-side">
+        <section class="dashboard-card">
+          <h3>Fluxo de estudo</h3>
+          <p>Escolha o exerc&iacute;cio, ou&ccedil;a a refer&ecirc;ncia e toque uma nota por vez at&eacute; o indicador ficar verde.</p>
+          <ul id="studyChecklist">
+            <li>Calibre o microfone antes de tocar no celular.</li>
+            <li>Use o sax correto: alto, tenor ou soprano.</li>
+            <li>Repita o exerc&iacute;cio quando a orienta&ccedil;&atilde;o pedir.</li>
+          </ul>
+        </section>
+        <section class="dashboard-card">
+          <h3>Atalhos</h3>
+          <div class="tool-row">
+            <a href="/dashboard/">Meu desempenho</a>
+            <a href="/recordings/">Grava&ccedil;&otilde;es</a>
+            <a href="/accounts/logout/">Sair</a>
+          </div>
+        </section>
+      </aside>
+    </div>
   </div>
   <script src="/static/app/audio.js"></script>
 </body>
