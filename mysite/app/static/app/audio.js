@@ -99,6 +99,20 @@ const renderLyricMelodyBtn = document.getElementById('renderLyricMelodyBtn');
 const playLyricMelodyBtn = document.getElementById('playLyricMelodyBtn');
 const practiceLyricMelodyBtn = document.getElementById('practiceLyricMelodyBtn');
 const lyricMelodyOutput = document.getElementById('lyricMelodyOutput');
+const readingExecutionBuilder = document.getElementById('readingExecutionBuilder');
+const readingLevel = document.getElementById('readingLevel');
+const readingKey = document.getElementById('readingKey');
+const readingMeter = document.getElementById('readingMeter');
+const readingBpm = document.getElementById('readingBpm');
+const readingPitchTheory = document.getElementById('readingPitchTheory');
+const readingRhythmTheory = document.getElementById('readingRhythmTheory');
+const readingFunctionTheory = document.getElementById('readingFunctionTheory');
+const readingScoreSvg = document.getElementById('readingScoreSvg');
+const readingNotes = document.getElementById('readingNotes');
+const readingSummary = document.getElementById('readingSummary');
+const generateReadingExerciseBtn = document.getElementById('generateReadingExerciseBtn');
+const playReadingExerciseBtn = document.getElementById('playReadingExerciseBtn');
+const practiceReadingExerciseBtn = document.getElementById('practiceReadingExerciseBtn');
 const exercises = document.getElementById('exercises');
 const labelCollection = document.getElementById('labelCollection');
 const downloads = document.getElementById('downloads');
@@ -144,8 +158,8 @@ function compactStageElements(){
     allAdvanced,
     stages: {
       beginner: [document.getElementById('beginnerPanel'), ...livePanels],
-      arrangement: [arrangementBuilder],
-      melody: [lyricMelodyBuilder],
+      arrangement: [arrangementBuilder, lyricMelodyBuilder],
+      reading: [readingExecutionBuilder],
       live: livePanels,
       history: [controls, exercises, labelCollection, downloads, suggestions, recordingPanel],
     },
@@ -216,6 +230,7 @@ let calibratedNoiseRms = 0.0015;
 let calibratedNoteRms = 0.003;
 let currentArrangement = null;
 let currentLyricMelody = null;
+let currentReadingExercise = null;
 
 let MIN_NOTE_RMS = 0.003;
 let SILENCE_RMS = 0.0015;
@@ -1138,6 +1153,12 @@ if(useArrangementPracticeBtn) useArrangementPracticeBtn.addEventListener('click'
 if(renderLyricMelodyBtn) renderLyricMelodyBtn.addEventListener('click', renderLyricMelody);
 if(playLyricMelodyBtn) playLyricMelodyBtn.addEventListener('click', playLyricMelody);
 if(practiceLyricMelodyBtn) practiceLyricMelodyBtn.addEventListener('click', practiceLyricMelody);
+if(generateReadingExerciseBtn) generateReadingExerciseBtn.addEventListener('click', generateReadingExercise);
+if(playReadingExerciseBtn) playReadingExerciseBtn.addEventListener('click', playReadingExercise);
+if(practiceReadingExerciseBtn) practiceReadingExerciseBtn.addEventListener('click', practiceReadingExercise);
+if(readingLevel) readingLevel.addEventListener('change', generateReadingExercise);
+if(readingKey) readingKey.addEventListener('change', generateReadingExercise);
+if(readingMeter) readingMeter.addEventListener('change', generateReadingExercise);
 if(routinePrevBtn) routinePrevBtn.addEventListener('click', ()=>setRoutineStep(beginnerRoutineIndex - 1));
 if(routineNextBtn) routineNextBtn.addEventListener('click', ()=>setRoutineStep(beginnerRoutineIndex + 1));
 if(advancedToggle && advancedTools) advancedToggle.addEventListener('click', ()=>{
@@ -2310,6 +2331,240 @@ function solfegeTokenToNoteName(token){
   return base ? `${base}${octave}` : null;
 }
 
+function majorScaleNotes(rootNote, count){
+  const rootMidi = noteNameToMidiNumber(rootNote) || 67;
+  const intervals = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21];
+  return intervals.slice(0, count).map(interval => midiToNoteName(rootMidi + interval));
+}
+
+function buildReadingExercise(){
+  const level = readingLevel ? readingLevel.value : 'absolute';
+  const key = readingKey ? readingKey.value : 'G4';
+  const meter = readingMeter ? readingMeter.value : '4/4';
+  const bpm = readingBpm ? clampBpm(readingBpm.value || 60) : 60;
+  const scale = majorScaleNotes(key, 8);
+  const fifth = scale[4] || scale[0];
+  const third = scale[2] || scale[0];
+  const second = scale[1] || scale[0];
+  const sixth = scale[5] || scale[0];
+  let notes = scale.slice(0, 5);
+  let beats = [1, 1, 1, 1, 2];
+  let degrees = ['1', '2', '3', '4', '5'];
+  let functions = ['repouso', 'movimento', 'cor', 'preparacao', 'apoio'];
+  let title = 'Notas na pauta';
+  let pitchTheory = 'Identifique cada nota na clave de sol antes de tocar.';
+  let rhythmTheory = 'Toque uma nota por pulso e sustente a ultima por dois tempos.';
+  let functionTheory = 'Comece no repouso, caminhe pela escala e apoie no quinto grau.';
+
+  if(level === 'scale_degrees'){
+    notes = [scale[0], third, fifth, sixth, fifth, third, second, scale[0]];
+    beats = [1, 1, 1, 1, 1, 1, 1, 2];
+    degrees = ['1', '3', '5', '6', '5', '3', '2', '1'];
+    functions = ['tonica', 'cor', 'dominante', 'tensao suave', 'dominante', 'cor', 'passagem', 'resolucao'];
+    title = 'Graus da escala';
+    pitchTheory = 'Leia pensando em graus: 1 e repouso, 3 colore, 5 estabiliza, 6 cria leve tensao.';
+    rhythmTheory = 'Mantenha todas as entradas no pulso, sem correr entre os saltos.';
+    functionTheory = 'A frase sai da tonica, abre no sexto grau e resolve novamente no primeiro.';
+  } else if(level === 'rhythm'){
+    notes = [scale[0], scale[0], second, third, fifth, fifth, third, scale[0]];
+    beats = meter === '6/8' ? [0.75, 0.75, 1.5, 0.75, 0.75, 1.5, 1.5, 3] : [0.5, 0.5, 1, 1, 0.5, 0.5, 1, 2];
+    degrees = ['1', '1', '2', '3', '5', '5', '3', '1'];
+    functions = ['pulso curto', 'pulso curto', 'passagem', 'cor', 'apoio', 'apoio', 'retorno', 'resolucao'];
+    title = 'Ritmo e duracao';
+    pitchTheory = 'As notas sao simples para a atencao ficar no tempo.';
+    rhythmTheory = 'Conte subdivisoes: notas curtas precisam de ataque limpo e notas longas precisam de ar firme.';
+    functionTheory = 'As notas fortes devem soar mais seguras, principalmente o primeiro e o ultimo grau.';
+  } else if(level === 'resolution'){
+    notes = [fifth, sixth, fifth, third, second, third, second, scale[0]];
+    beats = [1, 1, 0.5, 0.5, 1, 1, 1, 2];
+    degrees = ['5', '6', '5', '3', '2', '3', '2', '1'];
+    functions = ['chamada', 'tensao', 'retorno', 'cor', 'passagem', 'resposta', 'preparacao', 'resolucao'];
+    title = 'Frase com resolucao';
+    pitchTheory = 'Observe os saltos pequenos e toque mirando a nota de chegada.';
+    rhythmTheory = 'Use as notas curtas como movimento, sem perder a sustentacao.';
+    functionTheory = 'A frase cria tensao no sexto grau e repousa no primeiro grau na nota forte.';
+  }
+
+  return {
+    title,
+    key,
+    meter,
+    bpm,
+    notes,
+    beats,
+    degrees,
+    functions,
+    pitchTheory,
+    rhythmTheory,
+    functionTheory
+  };
+}
+
+function noteYFromScientificName(noteName){
+  const midi = noteNameToMidiNumber(noteName);
+  if(midi === null) return 88;
+  return Math.max(22, Math.min(118, 112 - (midi - 60) * 3.2));
+}
+
+function renderReadingScore(exercise){
+  if(!readingScoreSvg || !exercise) return;
+  const width = 680;
+  const height = 168;
+  const staffTop = 44;
+  const lineGap = 10;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', `Partitura de leitura: ${exercise.title}`);
+
+  const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  bg.setAttribute('x', '0');
+  bg.setAttribute('y', '0');
+  bg.setAttribute('width', `${width}`);
+  bg.setAttribute('height', `${height}`);
+  bg.setAttribute('fill', '#fffdf8');
+  svg.appendChild(bg);
+
+  for(let i = 0; i < 5; i += 1){
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', '24');
+    line.setAttribute('x2', `${width - 22}`);
+    line.setAttribute('y1', `${staffTop + i * lineGap}`);
+    line.setAttribute('y2', `${staffTop + i * lineGap}`);
+    line.setAttribute('stroke', '#24313a');
+    line.setAttribute('stroke-width', '1');
+    svg.appendChild(line);
+  }
+
+  const clef = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  clef.setAttribute('x', '30');
+  clef.setAttribute('y', `${staffTop + 39}`);
+  clef.setAttribute('font-size', '48');
+  clef.setAttribute('fill', '#123b47');
+  clef.setAttribute('font-family', 'Times New Roman, serif');
+  clef.textContent = '\uD834\uDD1E';
+  svg.appendChild(clef);
+
+  const time = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  time.setAttribute('x', '82');
+  time.setAttribute('y', `${staffTop + 26}`);
+  time.setAttribute('font-size', '18');
+  time.setAttribute('font-weight', '700');
+  time.setAttribute('fill', '#121c24');
+  time.textContent = exercise.meter;
+  svg.appendChild(time);
+
+  const totalBeats = exercise.beats.reduce((sum, beat)=>sum + beat, 0);
+  let cursor = 122;
+  const usableWidth = width - 160;
+  exercise.notes.forEach((note, index)=>{
+    const beat = exercise.beats[index] || 1;
+    const slot = Math.max(42, (beat / totalBeats) * usableWidth);
+    const x = cursor + slot / 2;
+    const y = noteYFromScientificName(note);
+    const head = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+    head.setAttribute('cx', `${x}`);
+    head.setAttribute('cy', `${y}`);
+    head.setAttribute('rx', '8');
+    head.setAttribute('ry', '6');
+    head.setAttribute('fill', beat >= 2 ? '#fffdf8' : '#2d7a62');
+    head.setAttribute('stroke', '#121c24');
+    head.setAttribute('stroke-width', '1.2');
+    svg.appendChild(head);
+
+    if(beat < 4){
+      const stem = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      stem.setAttribute('x1', `${x + 8}`);
+      stem.setAttribute('x2', `${x + 8}`);
+      stem.setAttribute('y1', `${y}`);
+      stem.setAttribute('y2', `${y - 28}`);
+      stem.setAttribute('stroke', '#121c24');
+      stem.setAttribute('stroke-width', '1.2');
+      svg.appendChild(stem);
+    }
+
+    const degree = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    degree.setAttribute('x', `${x - 5}`);
+    degree.setAttribute('y', `${staffTop + 76}`);
+    degree.setAttribute('font-size', '11');
+    degree.setAttribute('font-weight', '700');
+    degree.setAttribute('fill', '#c46d10');
+    degree.textContent = exercise.degrees[index] || '';
+    svg.appendChild(degree);
+
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('x', `${x - 12}`);
+    label.setAttribute('y', `${staffTop + 93}`);
+    label.setAttribute('font-size', '10');
+    label.setAttribute('fill', '#24313a');
+    label.textContent = note;
+    svg.appendChild(label);
+
+    cursor += slot;
+  });
+
+  readingScoreSvg.innerHTML = '';
+  readingScoreSvg.appendChild(svg);
+}
+
+function renderReadingNotes(exercise){
+  if(!readingNotes || !exercise) return;
+  readingNotes.innerHTML = '';
+  exercise.notes.forEach((note, index)=>{
+    const chip = document.createElement('span');
+    chip.textContent = `${exercise.degrees[index]}: ${noteToSolfege(note)} (${note})`;
+    chip.title = exercise.functions[index] || '';
+    readingNotes.appendChild(chip);
+  });
+}
+
+function generateReadingExercise(){
+  currentReadingExercise = buildReadingExercise();
+  if(readingPitchTheory) readingPitchTheory.textContent = currentReadingExercise.pitchTheory;
+  if(readingRhythmTheory) readingRhythmTheory.textContent = currentReadingExercise.rhythmTheory;
+  if(readingFunctionTheory) readingFunctionTheory.textContent = currentReadingExercise.functionTheory;
+  if(readingSummary){
+    readingSummary.textContent = `${currentReadingExercise.title} em ${noteToSolfege(currentReadingExercise.key)} maior, ${currentReadingExercise.meter}, ${currentReadingExercise.bpm} BPM. Leia, ouca e depois execute.`;
+  }
+  renderReadingScore(currentReadingExercise);
+  renderReadingNotes(currentReadingExercise);
+}
+
+async function playReadingExercise(){
+  if(!currentReadingExercise) generateReadingExercise();
+  if(!currentReadingExercise) return;
+  await playReferenceSequence(currentReadingExercise.notes, currentReadingExercise.bpm);
+}
+
+function practiceReadingExercise(){
+  if(!currentReadingExercise) generateReadingExercise();
+  if(!currentReadingExercise || !currentReadingExercise.notes.length) return;
+  beginnerStandaloneExercises.sheet_reading = {
+    title: `Leitura - ${currentReadingExercise.title}`,
+    mode: 'scale',
+    seconds: 0.5,
+    target: currentReadingExercise.notes[0],
+    bpm: currentReadingExercise.bpm,
+    sequence: currentReadingExercise.notes,
+    labels: currentReadingExercise.notes.map((note, index)=>`${currentReadingExercise.degrees[index]} - ${noteToSolfege(note)}`),
+    help: 'Leia a pauta, ouca a referencia e toque a sequencia respeitando pulso, altura e resolucao.'
+  };
+  const optionExists = beginnerExercise && Array.from(beginnerExercise.options).some(opt => opt.value === 'sheet_reading');
+  if(beginnerExercise && !optionExists){
+    const option = document.createElement('option');
+    option.value = 'sheet_reading';
+    option.textContent = 'Leitura com partitura';
+    beginnerExercise.appendChild(option);
+  }
+  if(beginnerExercise){
+    beginnerExercise.value = 'sheet_reading';
+    applyStandaloneExercise();
+    if(document.getElementById('beginnerRoutine')) document.getElementById('beginnerRoutine').style.display = '';
+    setBeginnerStatus('ready', 'Leitura', 'Partitura carregada. Clique em Tocar para praticar nota por nota.');
+    showAppStage('beginner');
+  }
+}
+
 function renderLyricMelody(){
   if(!lyricMelodyInput || !lyricMelodyOutput) return;
   const sections = parseLyricMelodyText(lyricMelodyInput.value);
@@ -3064,4 +3319,5 @@ if (listenRef) {
   });
 }
 updateDashboardSummary('', null, '');
+generateReadingExercise();
 showAppStage('beginner');

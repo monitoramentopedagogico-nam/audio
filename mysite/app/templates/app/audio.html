@@ -488,6 +488,34 @@
       min-height:140px;
     }
     #scoreContainer svg{width:100%;max-width:620px;height:auto;display:block}
+    #readingScoreSvg svg{width:100%;max-width:720px;height:auto;display:block}
+    .reading-theory-grid{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:10px;
+      margin:12px 0;
+    }
+    .theory-card{
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:var(--surface-soft);
+      padding:10px;
+    }
+    .theory-card strong{display:block;margin-bottom:4px;color:var(--ink)}
+    .theory-card span{color:var(--muted);font-size:13px;line-height:1.35}
+    .reading-note-strip{
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      margin-top:10px;
+    }
+    .reading-note-strip span{
+      border:1px solid var(--line);
+      border-radius:6px;
+      background:var(--surface);
+      padding:6px 8px;
+      font-weight:700;
+    }
     #noteTimeline,#feedbackList,#sessionList,#labeledList,#dlList,#suggestList,#recordingAnalysis{
       margin:8px 0 0;
       padding-left:20px;
@@ -535,6 +563,7 @@
       #beginnerMessage{font-size:16px}
       #routineSequence span{flex:1 1 calc(50% - 5px);text-align:center;padding:8px 6px}
       #routineNav{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+      .reading-theory-grid{grid-template-columns:1fr}
       #realtime>div{grid-template-columns:1fr!important}
       input[type="number"],select{width:100%!important}
       .tool-row input[type="url"]{min-width:0;width:100%}
@@ -576,7 +605,7 @@
         <nav class="app-stage-nav" aria-label="Etapas do aplicativo">
           <button class="stage-button is-active" type="button" data-stage-target="beginner">Modo iniciante</button>
           <button class="stage-button" type="button" data-stage-target="arrangement">Arranjo por cifra</button>
-          <button class="stage-button" type="button" data-stage-target="melody">Cifra mel&oacute;dica</button>
+          <button class="stage-button" type="button" data-stage-target="reading">Leitura</button>
           <button class="stage-button" type="button" data-stage-target="history">Registros</button>
         </nav>
 
@@ -759,6 +788,55 @@
     <h3>Partitura</h3>
     <div id="scoreContainer" aria-live="polite"></div>
     <ul id="noteTimeline"></ul>
+  </div>
+
+  <div id="readingExecutionBuilder" class="tool-section">
+    <h3>Leitura e execu&ccedil;&atilde;o com partitura</h3>
+    <p>Escolha um foco de teoria musical, ou&ccedil;a a refer&ecirc;ncia e pratique lendo a pauta nota por nota.</p>
+    <div class="tool-row">
+      <label>N&iacute;vel:
+        <select id="readingLevel">
+          <option value="absolute" selected>Notas na pauta</option>
+          <option value="scale_degrees">Graus da escala</option>
+          <option value="rhythm">Ritmo e dura&ccedil;&atilde;o</option>
+          <option value="resolution">Frase com resolu&ccedil;&atilde;o</option>
+        </select>
+      </label>
+      <label>Tom:
+        <select id="readingKey">
+          <option value="C4">Do maior</option>
+          <option value="D4">Re maior</option>
+          <option value="E4">Mi maior</option>
+          <option value="F4">Fa maior</option>
+          <option value="G4" selected>Sol maior</option>
+          <option value="A4">La maior</option>
+          <option value="Bb4">Sib maior</option>
+        </select>
+      </label>
+      <label>Compasso:
+        <select id="readingMeter">
+          <option value="4/4" selected>4/4</option>
+          <option value="3/4">3/4</option>
+          <option value="6/8">6/8</option>
+        </select>
+      </label>
+      <label>BPM:
+        <input id="readingBpm" type="number" value="60" min="30" max="160">
+      </label>
+    </div>
+    <div class="reading-theory-grid">
+      <div class="theory-card"><strong>Altura</strong><span id="readingPitchTheory">Leia a nota na clave de sol e confirme o nome antes de tocar.</span></div>
+      <div class="theory-card"><strong>Ritmo</strong><span id="readingRhythmTheory">Conte o pulso, respeite sem&iacute;nimas, m&iacute;nimas e colcheias.</span></div>
+      <div class="theory-card"><strong>Fun&ccedil;&atilde;o</strong><span id="readingFunctionTheory">Observe repouso, movimento e resolu&ccedil;&atilde;o nas notas fortes.</span></div>
+    </div>
+    <div id="readingScoreSvg" aria-live="polite"></div>
+    <div id="readingNotes" class="reading-note-strip"></div>
+    <div class="tool-row">
+      <button id="generateReadingExerciseBtn" type="button">Gerar exerc&iacute;cio</button>
+      <button id="playReadingExerciseBtn" type="button">Ouvir como sax</button>
+      <button id="practiceReadingExerciseBtn" type="button">Praticar leitura</button>
+    </div>
+    <p id="readingSummary">Exerc&iacute;cio inicial: leia as notas em Sol maior e toque com som est&aacute;vel.</p>
   </div>
 
   <div id="reference">
@@ -969,14 +1047,14 @@
         </svg>
         <span>Cifras</span>
       </button>
-      <button class="bottom-nav-button" type="button" data-stage-target="melody" aria-label="Cifra mel&oacute;dica">
+      <button class="bottom-nav-button" type="button" data-stage-target="reading" aria-label="Leitura e execu&ccedil;&atilde;o">
         <svg viewBox="0 0 48 48" aria-hidden="true">
           <path d="M5 18 24 8l19 10-19 10L5 18Z" />
           <path d="M13 23v8c6 5 16 5 22 0v-8" />
           <path d="M41 20v11" />
           <path d="M39 34h4" />
         </svg>
-        <span>Aulas</span>
+        <span>Leitura</span>
       </button>
       <button class="bottom-nav-button" type="button" data-stage-target="history" aria-label="Registros e configura&ccedil;&otilde;es">
         <svg viewBox="0 0 48 48" aria-hidden="true">
