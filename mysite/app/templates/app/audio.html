@@ -7,18 +7,25 @@
   <style>
     *{box-sizing:border-box}
     :root{
-      --bg:#edf4f2;
-      --surface:#fff;
-      --surface-soft:#f8fafc;
-      --line:#d9e2ec;
-      --text:#172033;
-      --muted:#64748b;
-      --accent:#237a57;
-      --accent-strong:#155e42;
-      --gold:#c9912d;
-      --warning:#f59e0b;
-      --danger:#c62828;
-      --ink:#0f172a;
+      --bg:#f3f0e8;
+      --surface:#fffdf8;
+      --surface-soft:#f8f5ee;
+      --surface-tint:#eef5ef;
+      --line:#d8ccbb;
+      --line-strong:#b7a68e;
+      --text:#24313a;
+      --muted:#6f7b82;
+      --accent:#2d7a62;
+      --accent-strong:#195c49;
+      --accent-soft:#e5f3ea;
+      --header:#123b47;
+      --header-2:#1f625a;
+      --gold:#c78a2c;
+      --gold-soft:#fff2ce;
+      --warning:#d98b12;
+      --danger:#b73a32;
+      --ink:#121c24;
+      --shadow:rgba(38,30,18,.09);
     }
     body{
       margin:0;
@@ -29,24 +36,24 @@
     button,select,input,textarea{font:inherit}
     button{
       min-height:40px;
-      border:1px solid #b7c3d0;
+      border:1px solid var(--line-strong);
       border-radius:6px;
-      background:#fff;
+      background:var(--surface);
       color:var(--ink);
       padding:8px 12px;
       cursor:pointer;
     }
-    button:hover:not(:disabled){border-color:#7890a8;background:#f8fafc}
+    button:hover:not(:disabled){border-color:var(--accent);background:var(--accent-soft)}
     button:disabled{opacity:.55;cursor:not-allowed}
     select,input,textarea{
-      border:1px solid #b7c3d0;
+      border:1px solid var(--line-strong);
       border-radius:6px;
-      background:#fff;
+      background:var(--surface);
       min-height:40px;
       color:var(--ink);
     }
-    label{color:#334155}
-    canvas{width:100%;height:120px;background:#0b1020;border-radius:6px;display:block}
+    label{color:#394b54}
+    canvas{width:100%;height:120px;background:#10222c;border-radius:6px;display:block}
     h1,h2,h3{line-height:1.15;margin:0;color:var(--ink);letter-spacing:0}
     h1{font-size:clamp(26px,4vw,38px)}
     h2{font-size:22px}
@@ -61,7 +68,7 @@
       position:relative;
       overflow:hidden;
       background:
-        linear-gradient(135deg,rgba(18,57,79,.96),rgba(31,91,86,.94)),
+        linear-gradient(135deg,rgba(18,59,71,.97),rgba(31,98,90,.94)),
         repeating-linear-gradient(0deg,rgba(255,255,255,.18) 0 1px,transparent 1px 14px);
       color:#fff;
       padding:24px clamp(14px,3vw,32px);
@@ -84,7 +91,7 @@
       display:inline-flex;
       align-items:center;
       gap:8px;
-      color:#ffe5a8;
+      color:#ffe4a3;
       font-size:13px;
       font-weight:800;
       text-transform:uppercase;
@@ -92,7 +99,7 @@
     }
     .header-kicker::before{content:"\1D11E";font-family:"Times New Roman",serif;font-size:24px;line-height:.8}
     .dashboard-header h1{color:#fff;margin-bottom:6px}
-    .dashboard-header p{color:#d7e4ec;margin:0}
+    .dashboard-header p{color:#e6ede9;margin:0}
     .dashboard-shell{
       display:grid;
       grid-template-columns:minmax(0,1fr) minmax(280px,360px);
@@ -113,7 +120,7 @@
       border:1px solid var(--line);
       border-radius:8px;
       padding:16px;
-      box-shadow:0 1px 2px rgba(15,23,42,.05);
+      box-shadow:0 1px 2px var(--shadow);
     }
     .status-grid{
       display:grid;
@@ -128,14 +135,14 @@
       padding:12px;
     }
     .encouragement-card{
-      border-color:#ead6aa;
-      background:linear-gradient(180deg,#fffaf0 0%,#fff 100%);
+      border-color:#e1c482;
+      background:linear-gradient(180deg,var(--gold-soft) 0%,var(--surface) 100%);
     }
     .clef-mark{
       display:flex;
       align-items:center;
       gap:10px;
-      color:#8a5b12;
+      color:#7d5314;
       font-weight:800;
     }
     .clef-symbol{
@@ -144,9 +151,9 @@
       display:flex;
       align-items:center;
       justify-content:center;
-      border:1px solid #e8cf98;
+      border:1px solid #dfbd73;
       border-radius:8px;
-      background:#fff8e8;
+      background:#fff6dc;
       font-family:"Times New Roman",serif;
       font-size:44px;
       line-height:1;
@@ -160,14 +167,14 @@
       z-index:20;
       grid-template-columns:repeat(4,minmax(0,1fr));
       gap:8px;
-      background:rgba(238,242,245,.96);
+      background:rgba(243,240,232,.96);
       padding:8px 0;
       backdrop-filter:blur(8px);
     }
     .stage-button{
       min-height:52px;
-      border-color:#cbd5e1;
-      background:#fff;
+      border-color:var(--line);
+      background:var(--surface);
       font-weight:800;
       line-height:1.15;
     }
@@ -188,9 +195,9 @@
       grid-template-columns:repeat(4,1fr);
       gap:0;
       padding:8px 10px calc(8px + env(safe-area-inset-bottom));
-      background:#c66f12;
-      border-top:4px solid #f2c879;
-      box-shadow:0 -8px 22px rgba(15,23,42,.18);
+      background:linear-gradient(180deg,#c98222 0%,#a76116 100%);
+      border-top:4px solid #f1ca77;
+      box-shadow:0 -8px 22px rgba(38,30,18,.2);
     }
     .bottom-nav-button{
       min-height:64px;
@@ -226,10 +233,10 @@
       color:#fff;
     }
     #beginnerPanel{
-      border-color:#cfe1d5;
+      border-color:#c9ddce;
       background:
-        linear-gradient(180deg,#fbfffc 0%,#f5fbf7 100%),
-        repeating-linear-gradient(0deg,transparent 0 13px,rgba(35,122,87,.08) 13px 14px);
+        linear-gradient(180deg,#fbfff9 0%,#f3f8f1 100%),
+        repeating-linear-gradient(0deg,transparent 0 13px,rgba(45,122,98,.08) 13px 14px);
     }
     #beginnerPanel h2{margin-bottom:14px}
     #beginnerControls,#perceptionControls,#controls,.tool-row{
@@ -255,11 +262,11 @@
       align-items:center;
       margin:12px 0;
       padding:12px 10px 14px;
-      border:1px dashed #1f2937;
+      border:1px dashed #31414a;
       border-left:0;
       border-right:0;
       border-radius:0;
-      background:#f8fafc;
+      background:#faf7ef;
       font-family:Consolas,"Courier New",monospace;
       position:relative;
     }
@@ -268,7 +275,7 @@
       position:absolute;
       right:0;
       top:-24px;
-      color:#111827;
+      color:var(--ink);
       font-weight:700;
     }
     .practice-play-panel::after{
@@ -278,21 +285,21 @@
       right:0;
       bottom:-10px;
       height:1px;
-      border-bottom:2px dashed #111827;
+      border-bottom:2px dashed #31414a;
     }
     .practice-play-panel .play-corner{
       position:absolute;
       right:0;
       bottom:-17px;
-      color:#111827;
+      color:var(--ink);
       font-weight:700;
     }
     .practice-play-panel button{
       min-height:46px;
       border:0;
       border-radius:6px;
-      background:#fff!important;
-      color:#111827;
+      background:var(--surface)!important;
+      color:var(--ink);
       font-family:inherit;
       font-weight:700;
       letter-spacing:.3px;
@@ -302,10 +309,10 @@
       text-overflow:ellipsis;
     }
     #beginnerStartBtn{
-      color:#111827;
+      color:var(--ink);
       font-size:15px;
-      border:1px solid #7fb896;
-      background:#effaf3!important;
+      border:1px solid #82b896;
+      background:var(--accent-soft)!important;
     }
     #beginnerStartBtn:hover:not(:disabled){
       color:var(--accent-strong);
@@ -315,8 +322,8 @@
       color:var(--accent-strong);
       opacity:1;
     }
-    #beginnerStopBtn{color:#8f1d1d}
-    .practice-play-panel button:hover:not(:disabled){background:#eef6ef!important;color:var(--accent-strong)}
+    #beginnerStopBtn{color:#8f2c28}
+    .practice-play-panel button:hover:not(:disabled){background:var(--accent-soft)!important;color:var(--accent-strong)}
     .play-panel-status{
       grid-column:1 / -1;
       color:var(--muted);
@@ -334,7 +341,7 @@
     #beginnerLight{
       min-height:128px;
       border-radius:8px;
-      background:#64748b;
+      background:#657177;
       display:flex;
       align-items:center;
       justify-content:center;
@@ -344,8 +351,8 @@
       text-align:center;
       padding:12px;
     }
-    #beginnerLight.ready{background:#3f6474}
-    #beginnerLight.good{background:#247a3b}
+    #beginnerLight.ready{background:#496f78}
+    #beginnerLight.good{background:#287849}
     #beginnerLight.close{background:var(--warning);color:#221b03}
     #beginnerLight.bad{background:var(--danger)}
     #beginnerLight .repeat-action{
@@ -358,7 +365,7 @@
       padding:0;
       min-height:0;
     }
-    #beginnerMessage{font-size:18px;margin-bottom:10px;color:#172033}
+    #beginnerMessage{font-size:18px;margin-bottom:10px;color:var(--text)}
     .repeat-message-action{
       border:0;
       background:transparent;
@@ -369,8 +376,8 @@
       padding:0;
       min-height:0;
     }
-    #beginnerProgress{height:16px;background:#e2e8f0;border-radius:8px;overflow:hidden}
-    #beginnerProgressFill{height:100%;width:0;background:#247a3b;transition:width .12s linear}
+    #beginnerProgress{height:16px;background:#e8dfd1;border-radius:8px;overflow:hidden}
+    #beginnerProgressFill{height:100%;width:0;background:var(--accent);transition:width .12s linear}
     #beginnerRoutine{
       border-top:1px solid #d6e5dc;
       margin-top:14px;
@@ -380,10 +387,10 @@
     #routineStepHelp,#calibrationStatus{color:var(--muted)}
     #routineSequence{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
     #routineSequence span{
-      border:1px solid #cbd5e1;
+      border:1px solid var(--line);
       border-radius:6px;
       padding:6px 9px;
-      background:#fff;
+      background:var(--surface);
     }
     #routineSequence span.active{background:var(--accent);color:#fff;border-color:var(--accent)}
     #routineNav{display:flex;gap:8px;flex-wrap:wrap}
@@ -392,7 +399,7 @@
       justify-content:flex-end;
       gap:8px;
     }
-    #advancedToggle{background:#12394f;color:#fff;border-color:#12394f}
+    #advancedToggle{background:var(--header);color:#fff;border-color:var(--header)}
     .advanced-hidden{display:none!important}
     #advancedTools{
       display:grid;
@@ -403,7 +410,7 @@
     #advancedTools > h1{display:none}
     #controls{
       grid-column:1 / -1;
-      background:#fff;
+      background:var(--surface);
       border:1px solid var(--line);
       border-radius:8px;
       padding:12px;
@@ -412,7 +419,7 @@
     #meter{
       width:100%;
       height:24px;
-      background:#111827;
+      background:#13242d;
       border-radius:6px;
       overflow:hidden;
       margin:0;
@@ -420,12 +427,12 @@
       padding:0;
       box-shadow:none;
     }
-    #meter>div{height:100%;background:#35b36f;width:0}
+    #meter>div{height:100%;background:var(--accent);width:0}
     #realtime>div{display:grid!important;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px}
     #realtime>div>div{
       min-width:0!important;
       background:var(--surface-soft);
-      border:1px solid #e2e8f0;
+      border:1px solid var(--line);
       border-radius:8px;
       padding:10px;
     }
@@ -442,42 +449,42 @@
       width:100%;
       margin-top:10px;
       padding:10px;
-      border:1px solid #cbd5e1;
+      border:1px solid var(--line);
       border-radius:8px;
       resize:vertical;
       font-family:Consolas,monospace;
     }
-    #arrangementSummary{margin-top:10px;color:#374151}
+    #arrangementSummary{margin-top:10px;color:#3f4d55}
     #arrangementChords,#arrangementNotes{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
     #arrangementChords span,#arrangementNotes span{
-      border:1px solid #cbd5e1;
+      border:1px solid var(--line);
       border-radius:6px;
-      background:#fff;
+      background:var(--surface);
       padding:5px 8px;
     }
     #melodicCipher,#scoreContainer{max-width:100%;overflow-x:auto}
     #melodicCipher{margin-top:12px}
-    #melodicCipher table{width:100%;border-collapse:collapse;background:#fff}
-    #melodicCipher th,#melodicCipher td{border:1px solid #cbd5e1;padding:8px;text-align:left;vertical-align:top}
-    #melodicCipher th{background:#eef6ef}
+    #melodicCipher table{width:100%;border-collapse:collapse;background:var(--surface)}
+    #melodicCipher th,#melodicCipher td{border:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}
+    #melodicCipher th{background:var(--accent-soft)}
     #melodicCipher td:nth-child(2){min-width:220px;white-space:normal}
     #lyricMelodyOutput{
       margin-top:12px;
-      background:#fff;
-      border:1px solid #cbd5e1;
+      background:var(--surface);
+      border:1px solid var(--line);
       border-radius:8px;
       padding:12px;
     }
     .lyric-melody-line{margin:10px 0 16px;text-align:center}
-    .lyric-melody-notes{font-family:Consolas,monospace;font-weight:700;color:#008000;white-space:pre-wrap}
-    .lyric-melody-notes .strong{color:#ff6b00}
+    .lyric-melody-notes{font-family:Consolas,monospace;font-weight:700;color:var(--accent-strong);white-space:pre-wrap}
+    .lyric-melody-notes .strong{color:#c46d10}
     .lyric-melody-text{font-size:20px;margin-top:4px;white-space:pre-wrap}
     #scoreContainer{
       margin-top:10px;
       padding:12px;
-      border:1px solid #ddd;
+      border:1px solid var(--line);
       border-radius:8px;
-      background:#fff;
+      background:var(--surface);
       min-height:140px;
     }
     #scoreContainer svg{width:100%;max-width:620px;height:auto;display:block}
@@ -705,7 +712,7 @@
     <div style="display:flex;gap:12px;flex-wrap:wrap">
       <div style="min-width:160px">
         <strong>RMS</strong>
-        <div id="rmsMeter" style="height:14px;background:#eee;border-radius:4px;overflow:hidden"><div id="rmsFill" style="height:100%;background:#2196f3;width:0"></div></div>
+        <div id="rmsMeter" style="height:14px;background:#e8dfd1;border-radius:4px;overflow:hidden"><div id="rmsFill" style="height:100%;background:#2d7a62;width:0"></div></div>
       </div>
       <div style="min-width:160px">
         <strong>Spectral centroid</strong>
@@ -724,7 +731,7 @@
         <div id="attackVal">—</div>
       </div>
     </div>
-    <canvas id="spectrogram" style="width:100%;height:120px;background:#000;margin-top:8px;display:block"></canvas>
+    <canvas id="spectrogram" style="width:100%;height:120px;background:#10222c;margin-top:8px;display:block"></canvas>
   </div>
 
   <div>
@@ -739,9 +746,9 @@
     </div>
     <div id="tuningMeterWrap">
       <strong>Medidor de afinação</strong>
-      <div id="tuningMeter" style="height:12px;background:#ddd;border-radius:6px;position:relative;overflow:hidden">
-        <div id="tuningFill" style="position:absolute;left:50%;top:0;bottom:0;width:2px;background:#333"></div>
-        <div id="tuningNeedle" style="position:absolute;left:50%;top:-6px;width:2px;height:24px;background:#e91e63;transform:translateX(-50%)"></div>
+      <div id="tuningMeter" style="height:12px;background:#e8dfd1;border-radius:6px;position:relative;overflow:hidden">
+        <div id="tuningFill" style="position:absolute;left:50%;top:0;bottom:0;width:2px;background:#123b47"></div>
+        <div id="tuningNeedle" style="position:absolute;left:50%;top:-6px;width:2px;height:24px;background:#b73a32;transform:translateX(-50%)"></div>
       </div>
     </div>
     <div>

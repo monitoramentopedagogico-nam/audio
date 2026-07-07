@@ -1200,7 +1200,7 @@ function updateTargetMatch(pitch){
   const diffCents = Math.round(1200 * Math.log2(pitch / targetFreq));
   const absDiff = Math.abs(diffCents);
   targetMatchEl.textContent = absDiff <= tol ? `Dentro (${diffCents} cents)` : `Fora (${diffCents} cents)`;
-  targetMatchEl.style.color = absDiff <= tol ? 'green' : 'crimson';
+  targetMatchEl.style.color = absDiff <= tol ? '#195c49' : '#b73a32';
 }
 
 if(startMetronomeBtn) startMetronomeBtn.addEventListener('click', startMetronome);
@@ -1688,7 +1688,7 @@ function updateLevel(data){
   const rms = Math.sqrt(sum/data.length);
   const percent = Math.min(1, rms*1.6);
   meterFill.style.width = (percent*100)+'%';
-  if(percent>0.85) meterFill.style.background = '#f44336'; else meterFill.style.background = '#4caf50';
+  if(percent>0.85) meterFill.style.background = '#b73a32'; else meterFill.style.background = '#2d7a62';
 }
 
 let lastAdvice = '';
