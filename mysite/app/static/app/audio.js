@@ -7,6 +7,7 @@ let currentScoreEvent = null;
 let captureStartTime = 0;
 let lastDetectedNote = null;
 let noteDisplay = null;
+let referencePlaybackId = 0;
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 const controls = document.getElementById('controls');
@@ -882,7 +883,11 @@ async function playBeginnerReference(){
   }
   if(step && step.sequence){
     try {
-      await playReferenceSequence(step.sequence, step.bpm || 60);
+      await playReferenceSequence(step.sequence, step.bpm || 60, (index)=>{
+        const chips = routineSequence ? Array.from(routineSequence.querySelectorAll('span')) : [];
+        chips.forEach((chip, chipIndex)=>chip.classList.toggle('reference-playing', chipIndex === index));
+      });
+      renderRoutineSequenceForStep(step);
       setBeginnerStatus('ready', 'Refer\u00eancia', 'Ou\u00e7a a sequencia e depois toque uma nota por vez.');
     } catch(e) {
       console.error('reference sequence failed', e);
@@ -959,15 +964,29 @@ function playReferenceTone(frequency, startTime, duration){
   vibrato.stop(startTime + duration + 0.03);
 }
 
-async function playReferenceSequence(sequence, bpm){
+async function playReferenceSequence(sequence, bpm, onNoteChange){
   const ctx = await ensureAudioContext();
   const beat = 60 / clampBpm(bpm || 60);
   const duration = Math.min(0.9, beat * 0.82);
   const start = ctx.currentTime + 0.08;
+  const playbackId = ++referencePlaybackId;
   sequence.forEach((note, index)=>{
     const frequency = writtenNoteToSoundingFrequency(note);
     if(frequency) playReferenceTone(frequency, start + index * beat, duration);
+    if(onNoteChange){
+      const delay = Math.max(0, (start + index * beat - ctx.currentTime) * 1000);
+      window.setTimeout(()=>{
+        if(playbackId === referencePlaybackId) onNoteChange(index, note);
+      }, delay);
+    }
   });
+  if(onNoteChange && sequence.length){
+    const finishDelay = Math.max(0, (start + sequence.length * beat - ctx.currentTime) * 1000);
+    await new Promise(resolve=>window.setTimeout(()=>{
+      if(playbackId === referencePlaybackId) onNoteChange(-1, null);
+      resolve();
+    }, finishDelay));
+  }
 }
 
 function updateBeginnerMetronomeButton(){
@@ -2533,7 +2552,10 @@ function generateReadingExercise(){
 async function playReadingExercise(){
   if(!currentReadingExercise) generateReadingExercise();
   if(!currentReadingExercise) return;
-  await playReferenceSequence(currentReadingExercise.notes, currentReadingExercise.bpm);
+  await playReferenceSequence(currentReadingExercise.notes, currentReadingExercise.bpm, (index)=>{
+    const chips = readingNotes ? Array.from(readingNotes.querySelectorAll('span')) : [];
+    chips.forEach((chip, chipIndex)=>chip.classList.toggle('reference-playing', chipIndex === index));
+  });
 }
 
 function practiceReadingExercise(){
@@ -2604,7 +2626,10 @@ function renderLyricMelody(){
 async function playLyricMelody(){
   if(!currentLyricMelody || !currentLyricMelody.notes.length) renderLyricMelody();
   if(!currentLyricMelody || !currentLyricMelody.notes.length) return;
-  await playReferenceSequence(currentLyricMelody.notes, arrangementBpm ? clampBpm(arrangementBpm.value || 70) : 70);
+  const melodyChips = lyricMelodyOutput ? Array.from(lyricMelodyOutput.querySelectorAll('.lyric-melody-notes span')) : [];
+  await playReferenceSequence(currentLyricMelody.notes, arrangementBpm ? clampBpm(arrangementBpm.value || 70) : 70, (index)=>{
+    melodyChips.forEach((chip, chipIndex)=>chip.classList.toggle('reference-playing', chipIndex === index));
+  });
 }
 
 function practiceLyricMelody(){
