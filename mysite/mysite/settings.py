@@ -1,12 +1,18 @@
 import os
 from pathlib import Path
 from urllib.parse import urlparse
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-change-me")
-DEBUG = os.getenv("DEBUG", "False").lower() in {"1", "true", "yes", "on"}
-ALLOWED_HOSTS = [host.strip() for host in os.getenv("ALLOWED_HOSTS", "*").split(",") if host.strip()]
+DEBUG = os.getenv("DEBUG", "True").lower() in {"1", "true", "yes", "on"}
+SECRET_KEY = os.getenv("SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "django-insecure-local-development-only"
+    else:
+        raise ImproperlyConfigured("SECRET_KEY must be configured when DEBUG=False")
+ALLOWED_HOSTS = [host.strip() for host in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host.strip()]
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
@@ -16,6 +22,12 @@ CSRF_TRUSTED_ORIGINS = [
     if origin.strip()
 ]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = not DEBUG
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -72,7 +84,7 @@ if database_url:
             "PORT": str(database.port or 5432),
         }
     }
-else:
+elif not DEBUG or any(os.getenv(name) for name in ('POSTGRES_DB', 'DB_NAME', 'POSTGRES_HOST', 'DB_HOST')):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
@@ -81,6 +93,13 @@ else:
             "PASSWORD": os.getenv("POSTGRES_PASSWORD") or os.getenv("DB_PASSWORD", "mypassword"),
             "HOST": os.getenv("POSTGRES_HOST") or os.getenv("DB_HOST", "db"),
             "PORT": os.getenv("POSTGRES_PORT") or os.getenv("DB_PORT", "5432"),
+        }
+    }
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
         }
     }
 

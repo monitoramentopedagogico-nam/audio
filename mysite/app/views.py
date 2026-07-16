@@ -3,7 +3,6 @@ from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.auth.decorators import login_required
-from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.utils import timezone
 import json
@@ -11,7 +10,26 @@ import base64
 import html
 import re
 import urllib.request
+import binascii
 from urllib.parse import urlparse
+
+
+MAX_AUDIO_BYTES = 20 * 1024 * 1024
+MAX_SYNC_SESSIONS = 100
+MAX_SYNC_SAMPLES = 20
+ALLOWED_AUDIO_TYPES = {
+    'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/ogg', 'audio/wav',
+    'audio/x-wav', 'audio/webm', 'application/octet-stream',
+}
+
+
+def _validate_audio_upload(upload):
+    if upload.size > MAX_AUDIO_BYTES:
+        return HttpResponseBadRequest('Audio exceeds the 20 MB limit.')
+    content_type = (getattr(upload, 'content_type', '') or '').lower()
+    if content_type and content_type not in ALLOWED_AUDIO_TYPES:
+        return HttpResponseBadRequest('Unsupported audio format.')
+    return None
 
 
 @ensure_csrf_cookie
@@ -19,6 +37,7 @@ def index(request):
     return render(request, "app/index.html")
 
 
+@login_required
 @require_POST
 def location_update(request):
     try:
@@ -33,11 +52,14 @@ def location_update(request):
 
     from .models import Location
 
-    loc = Location.objects.create(latitude=lat, longitude=lon, accuracy=acc)
+    loc = Location.objects.create(user=request.user, latitude=lat, longitude=lon, accuracy=acc)
     return JsonResponse({'status': 'ok', 'id': loc.id})
 
 
+@login_required
 def locations_list(request):
+    if not request.user.is_staff:
+        return render(request, 'app/forbidden.html', status=403)
     from .models import Location
     qs = Location.objects.order_by('-recorded_at')[:200]
     return render(request, 'app/locations.html', {'locations': qs})
@@ -149,6 +171,9 @@ def upload_audio(request):
     f = request.FILES.get('audio')
     if not f:
         return HttpResponseBadRequest('No audio file')
+    validation_error = _validate_audio_upload(f)
+    if validation_error:
+        return validation_error
     from .models import Recording
     rec = Recording(user=request.user)
     rec.file.save(f.name, f, save=True)
@@ -172,6 +197,9 @@ def upload_sample(request):
     exercise = request.POST.get('exercise') or ''
     if not f or not labels:
         return HttpResponseBadRequest('Missing audio or labels')
+    validation_error = _validate_audio_upload(f)
+    if validation_error:
+        return validation_error
     try:
         labels_json = json.loads(labels)
     except Exception:
@@ -200,7 +228,14 @@ def sync_local_data(request):
     synced_sessions = 0
     synced_samples = 0
 
-    for session_payload in payload.get('sessions', []):
+    sessions = payload.get('sessions', [])
+    samples = payload.get('samples', [])
+    if not isinstance(sessions, list) or not isinstance(samples, list):
+        return HttpResponseBadRequest('Sessions and samples must be lists.')
+    if len(sessions) > MAX_SYNC_SESSIONS or len(samples) > MAX_SYNC_SAMPLES:
+        return HttpResponseBadRequest('Sync batch is too large.')
+
+    for session_payload in sessions:
         client_id = session_payload.get('client_id') or ''
         if not client_id:
             continue
@@ -220,17 +255,33 @@ def sync_local_data(request):
             obj.save()
         synced_sessions += 1
 
-    for sample_payload in payload.get('samples', []):
+    for sample_payload in samples:
+        client_id = str(sample_payload.get('id') or '')[:64]
+        if not client_id:
+            continue
+        if LabeledSample.objects.filter(user=request.user, client_id=client_id).exists():
+            synced_samples += 1
+            continue
         audio_b64 = sample_payload.get('audio_b64')
         if not audio_b64:
             continue
         labels = sample_payload.get('labels', {})
         features = sample_payload.get('features', {})
         exercise = sample_payload.get('exercise', '')
-        raw = base64.b64decode(audio_b64)
+        if not isinstance(audio_b64, str) or len(audio_b64) > ((MAX_AUDIO_BYTES * 4 // 3) + 8):
+            return HttpResponseBadRequest('Audio exceeds the 20 MB limit.')
+        try:
+            raw = base64.b64decode(audio_b64, validate=True)
+        except (ValueError, binascii.Error):
+            return HttpResponseBadRequest('Invalid base64 audio.')
+        if len(raw) > MAX_AUDIO_BYTES:
+            return HttpResponseBadRequest('Audio exceeds the 20 MB limit.')
         rec = Recording(user=request.user)
-        rec.file.save(f"{sample_payload.get('id', 'sample')}.webm", ContentFile(raw), save=True)
-        LabeledSample.objects.create(user=request.user, recording=rec, exercise=exercise, labels=labels, features=features)
+        rec.file.save(f"{client_id}.webm", ContentFile(raw), save=True)
+        LabeledSample.objects.create(
+            user=request.user, client_id=client_id, recording=rec,
+            exercise=exercise, labels=labels, features=features,
+        )
         synced_samples += 1
 
     return JsonResponse({'status': 'ok', 'synced_sessions': synced_sessions, 'synced_samples': synced_samples})

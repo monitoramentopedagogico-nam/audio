@@ -2688,7 +2688,19 @@ function renderArrangement(analysis){
     analysis.measures.slice(0, 24).forEach((measure, index)=>{
       const sounding = soundingNotesForWrittenNotes(measure.notes);
       const row = document.createElement('tr');
-      row.innerHTML = `<td>${index + 1}</td><td>${measure.lyric || ''}</td><td>${measure.chord}</td><td>${measure.degrees.join(' - ')}</td><td>${measure.notes.map(noteToSolfege).join(' - ')}</td><td>${sounding.map(noteToSolfege).join(' - ')}</td><td>${measure.functions.join(' - ')}</td>`;
+      [
+        index + 1,
+        measure.lyric || '',
+        measure.chord,
+        measure.degrees.join(' - '),
+        measure.notes.map(noteToSolfege).join(' - '),
+        sounding.map(noteToSolfege).join(' - '),
+        measure.functions.join(' - '),
+      ].forEach((value)=>{
+        const cell = document.createElement('td');
+        cell.textContent = String(value);
+        row.appendChild(cell);
+      });
       body.appendChild(row);
     });
     table.appendChild(body);
@@ -2994,8 +3006,6 @@ function exportMusicXML(){
 }
 
 if (exportMusicXMLBtn) exportMusicXMLBtn.addEventListener('click', exportMusicXML);
-if (exportMidiBtn) exportMidiBtn.addEventListener('click', ()=>{ alert('Exportar MIDI ainda não implementado — use MusicXML para abrir no MuseScore Studio.'); });
-
 // MIDI export (simple format 0)
 function writeVarLen(value){
   const buffer = [];

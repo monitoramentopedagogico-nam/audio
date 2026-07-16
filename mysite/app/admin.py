@@ -11,7 +11,7 @@ from .models import Location
 
 @admin.register(Location)
 class LocationAdmin(admin.ModelAdmin):
-    list_display = ("id", "latitude", "longitude", "accuracy", "recorded_at")
+    list_display = ("id", "user", "latitude", "longitude", "accuracy", "recorded_at")
     readonly_fields = ("recorded_at",)
     ordering = ("-recorded_at",)
 

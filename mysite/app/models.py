@@ -10,6 +10,9 @@ class Message(models.Model):
 
 
 class Location(models.Model):
+    user = models.ForeignKey(
+        'auth.User', null=True, blank=True, on_delete=models.SET_NULL
+    )
     latitude = models.FloatField()
     longitude = models.FloatField()
     accuracy = models.FloatField(null=True, blank=True)
@@ -32,6 +35,7 @@ class Recording(models.Model):
 
 class LabeledSample(models.Model):
     user = models.ForeignKey('auth.User', null=True, blank=True, on_delete=models.SET_NULL)
+    client_id = models.CharField(max_length=64, blank=True, default='')
     recording = models.ForeignKey(Recording, null=True, blank=True, on_delete=models.SET_NULL)
     exercise = models.CharField(max_length=64, blank=True)
     labels = models.JSONField(default=dict, blank=True)
@@ -40,6 +44,15 @@ class LabeledSample(models.Model):
 
     def __str__(self):
         return f"LabeledSample {self.id} ({self.created_at.isoformat()})"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'client_id'],
+                condition=~models.Q(client_id=''),
+                name='unique_sample_client_id_per_user',
+            ),
+        ]
 
 
 class PracticeSession(models.Model):
@@ -52,3 +65,12 @@ class PracticeSession(models.Model):
 
     def __str__(self):
         return f"PracticeSession {self.id} ({self.exercise})"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'client_id'],
+                condition=~models.Q(client_id=''),
+                name='unique_session_client_id_per_user',
+            ),
+        ]
