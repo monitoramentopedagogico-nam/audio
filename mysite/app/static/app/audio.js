@@ -2574,6 +2574,8 @@ function renderReadingScore(exercise){
       svg.appendChild(accidental);
     }
     const head = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+    head.classList.add('reading-note-head');
+    head.dataset.readingNoteIndex = String(index);
     head.setAttribute('cx', `${x}`);
     head.setAttribute('cy', `${y}`);
     head.setAttribute('rx', '8');
@@ -2649,6 +2651,10 @@ async function playReadingExercise(){
   await playReferenceSequence(currentReadingExercise.notes, currentReadingExercise.bpm, (index)=>{
     const chips = readingNotes ? Array.from(readingNotes.querySelectorAll('span')) : [];
     chips.forEach((chip, chipIndex)=>chip.classList.toggle('reference-playing', chipIndex === index));
+    const scoreNotes = readingScoreSvg ? Array.from(readingScoreSvg.querySelectorAll('.reading-note-head')) : [];
+    scoreNotes.forEach((noteHead, noteIndex)=>{
+      noteHead.classList.toggle('reference-playing', noteIndex === index);
+    });
   });
 }
 

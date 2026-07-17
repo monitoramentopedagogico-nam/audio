@@ -505,6 +505,18 @@
     }
     #scoreContainer svg{width:100%;max-width:620px;height:auto;display:block}
     #readingScoreSvg svg{width:100%;max-width:720px;height:auto;display:block}
+    #readingScoreSvg .reading-note-head{
+      transition:fill .1s ease,stroke .1s ease,filter .1s ease,transform .1s ease;
+      transform-box:fill-box;
+      transform-origin:center;
+    }
+    #readingScoreSvg .reading-note-head.reference-playing{
+      fill:#c46d10;
+      stroke:#7d3f08;
+      stroke-width:2.2;
+      filter:drop-shadow(0 0 5px rgba(196,109,16,.65));
+      transform:scale(1.22);
+    }
     .reading-theory-grid{
       display:grid;
       grid-template-columns:repeat(3,minmax(0,1fr));
