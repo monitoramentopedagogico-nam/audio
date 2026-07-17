@@ -575,10 +575,12 @@
       .status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     }
     @media (max-width:700px){
+      html,body{max-width:100%;overflow-x:hidden}
       .dashboard-page{padding-bottom:90px}
       .dashboard-header{padding:18px 12px}
       .dashboard-header::after{font-size:92px;right:-4px;opacity:.8}
-      .dashboard-shell{padding:10px;gap:10px}
+      .dashboard-shell{padding:8px;gap:10px;min-width:0}
+      .dashboard-main,.dashboard-side,.tool-section,#readingExecutionBuilder{min-width:0;max-width:100%}
       .dashboard-card,#beginnerPanel,.tool-section,#advancedTools > div:not(#controls),#reference,#downloads,#suggestions{padding:12px}
       .status-grid{grid-template-columns:1fr}
       .app-stage-nav{
@@ -609,6 +611,7 @@
       .play-panel-status{grid-column:1 / -1;font-size:12px}
       #beginnerPanel{padding-bottom:190px}
       #beginnerControls,#perceptionControls,#controls,.tool-row{display:grid;grid-template-columns:1fr;gap:8px;align-items:stretch}
+      .tool-row label{display:grid;grid-template-columns:1fr;gap:5px;width:100%;min-width:0}
       #beginnerControls label,#perceptionControls label{width:100%;min-width:0}
       #beginnerControls button,#controls button,.tool-row button,#advancedToggle{width:100%}
       #beginnerSignal{grid-template-columns:1fr}
@@ -617,11 +620,41 @@
       #routineSequence span{flex:1 1 calc(50% - 5px);text-align:center;padding:8px 6px}
       #routineNav{display:grid;grid-template-columns:1fr 1fr;gap:8px}
       .reading-theory-grid{grid-template-columns:1fr}
+      .score-import-panel{display:grid;grid-template-columns:minmax(0,1fr);padding:10px}
+      .score-import-panel label,.score-import-panel input,.score-import-panel button{min-width:0;width:100%;max-width:100%}
+      .saved-score-actions{display:grid;grid-template-columns:minmax(0,1fr)}
+      .saved-score-actions input,.saved-score-actions button{min-width:0;width:100%}
+      .saved-score-item{display:grid;grid-template-columns:minmax(0,1fr) 1fr 1fr;align-items:stretch}
+      .saved-score-item span{grid-column:1 / -1}
+      #readingScoreSvg{
+        width:100%;
+        max-width:100%;
+        overflow-x:auto;
+        overflow-y:hidden;
+        -webkit-overflow-scrolling:touch;
+        overscroll-behavior-x:contain;
+        touch-action:pan-x;
+        border:1px solid var(--line);
+        border-radius:7px;
+        background:#fffdf8;
+      }
+      #readingScoreSvg svg{height:150px;width:auto;max-width:none}
+      .reading-note-strip{flex-wrap:nowrap;overflow-x:auto;padding:2px 0 7px;-webkit-overflow-scrolling:touch}
+      .reading-note-strip span{flex:0 0 auto;font-size:14px;padding:6px}
       .practice-quick-actions,.progress-overview-grid,.profile-grid{grid-template-columns:1fr}
       #realtime>div{grid-template-columns:1fr!important}
       input[type="number"],select{width:100%!important}
       .tool-row input[type="url"]{min-width:0;width:100%}
       canvas{height:96px}
+    }
+    @media (max-width:420px){
+      .dashboard-header h1{font-size:26px}
+      .dashboard-card,#beginnerPanel,.tool-section,#advancedTools > div:not(#controls),#reference,#downloads,#suggestions{padding:10px}
+      .theory-card{padding:9px}
+      #readingScoreSvg svg{height:138px}
+      .saved-score-item{grid-template-columns:1fr}
+      .saved-score-item span{grid-column:auto}
+      button,select,input{min-height:44px}
     }
   </style>
 </head>
