@@ -2475,9 +2475,34 @@ function buildReadingExercise(){
 }
 
 function noteYFromScientificName(noteName){
-  const midi = noteNameToMidiNumber(noteName);
-  if(midi === null) return 88;
-  return Math.max(22, Math.min(118, 112 - (midi - 60) * 3.2));
+  const match = (noteName || '').trim().match(/^([A-Ga-g])(?:#|b)?(-?\d+)$/);
+  if(!match) return 84;
+  const letterStep = {C:0, D:1, E:2, F:3, G:4, A:5, B:6}[match[1].toUpperCase()];
+  const octave = Number(match[2]);
+  const diatonicStep = octave * 7 + letterStep;
+  const e4Step = 4 * 7 + 2;
+  // Na clave de sol, E4 fica na primeira linha inferior. Cada passo
+  // diatonico (linha ou espaco) equivale a metade do espacamento da pauta.
+  return Math.max(19, Math.min(139, 84 - (diatonicStep - e4Step) * 5));
+}
+
+function appendReadingLedgerLines(svg, x, y){
+  const ledgerYs = [];
+  if(y >= 94){
+    for(let ledgerY = 94; ledgerY <= y; ledgerY += 10) ledgerYs.push(ledgerY);
+  } else if(y <= 34){
+    for(let ledgerY = 34; ledgerY >= y; ledgerY -= 10) ledgerYs.push(ledgerY);
+  }
+  ledgerYs.forEach((ledgerY)=>{
+    const ledger = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    ledger.setAttribute('x1', `${x - 13}`);
+    ledger.setAttribute('x2', `${x + 13}`);
+    ledger.setAttribute('y1', `${ledgerY}`);
+    ledger.setAttribute('y2', `${ledgerY}`);
+    ledger.setAttribute('stroke', '#24313a');
+    ledger.setAttribute('stroke-width', '1.2');
+    svg.appendChild(ledger);
+  });
 }
 
 function renderReadingScore(exercise){
@@ -2536,6 +2561,18 @@ function renderReadingScore(exercise){
     const slot = Math.max(42, (beat / totalBeats) * usableWidth);
     const x = cursor + slot / 2;
     const y = noteYFromScientificName(note);
+    appendReadingLedgerLines(svg, x, y);
+    const accidentalMatch = (note || '').match(/([#b])/);
+    if(accidentalMatch){
+      const accidental = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      accidental.setAttribute('x', `${x - 22}`);
+      accidental.setAttribute('y', `${y + 5}`);
+      accidental.setAttribute('font-size', '18');
+      accidental.setAttribute('font-family', 'Times New Roman, serif');
+      accidental.setAttribute('fill', '#121c24');
+      accidental.textContent = accidentalMatch[1] === '#' ? '♯' : '♭';
+      svg.appendChild(accidental);
+    }
     const head = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
     head.setAttribute('cx', `${x}`);
     head.setAttribute('cy', `${y}`);
@@ -2548,10 +2585,12 @@ function renderReadingScore(exercise){
 
     if(beat < 4){
       const stem = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      stem.setAttribute('x1', `${x + 8}`);
-      stem.setAttribute('x2', `${x + 8}`);
+      const stemDown = y <= staffTop + lineGap * 2;
+      const stemX = stemDown ? x - 8 : x + 8;
+      stem.setAttribute('x1', `${stemX}`);
+      stem.setAttribute('x2', `${stemX}`);
       stem.setAttribute('y1', `${y}`);
-      stem.setAttribute('y2', `${y - 28}`);
+      stem.setAttribute('y2', `${stemDown ? y + 28 : y - 28}`);
       stem.setAttribute('stroke', '#121c24');
       stem.setAttribute('stroke-width', '1.2');
       svg.appendChild(stem);
