@@ -236,6 +236,7 @@
     }
     #beginnerPanel{
       border-color:#c9ddce;
+      padding-bottom:132px;
       background:
         linear-gradient(180deg,#fbfff9 0%,#f3f8f1 100%),
         repeating-linear-gradient(0deg,transparent 0 13px,rgba(45,122,98,.08) 13px 14px);
@@ -260,46 +261,29 @@
     .practice-play-panel{
       display:grid;
       grid-template-columns:repeat(6,minmax(0,1fr));
-      gap:8px;
+      gap:10px;
       align-items:center;
-      margin:12px 0;
-      padding:12px 10px 14px;
-      border:1px dashed #31414a;
-      border-left:0;
-      border-right:0;
-      border-radius:0;
-      background:#faf7ef;
+      position:fixed;
+      left:50%;
+      bottom:86px;
+      z-index:45;
+      width:min(1180px,calc(100vw - 24px));
+      margin:0;
+      padding:12px 14px 10px;
+      transform:translateX(-50%);
+      border:1px solid rgba(49,65,74,.28);
+      border-radius:14px;
+      background:rgba(250,247,239,.94);
+      box-shadow:0 14px 38px rgba(18,28,36,.22),0 2px 8px rgba(18,28,36,.12);
+      backdrop-filter:blur(14px);
       font-family:Consolas,"Courier New",monospace;
-      position:relative;
     }
-    .practice-play-panel::before{
-      content:"|";
-      position:absolute;
-      right:0;
-      top:-24px;
-      color:var(--ink);
-      font-weight:700;
-    }
-    .practice-play-panel::after{
-      content:"";
-      position:absolute;
-      left:0;
-      right:0;
-      bottom:-10px;
-      height:1px;
-      border-bottom:2px dashed #31414a;
-    }
-    .practice-play-panel .play-corner{
-      position:absolute;
-      right:0;
-      bottom:-17px;
-      color:var(--ink);
-      font-weight:700;
-    }
+    .dashboard-page.practice-active .practice-play-panel{bottom:12px}
+    .practice-play-panel .play-corner{display:none}
     .practice-play-panel button{
       min-height:46px;
       border:0;
-      border-radius:6px;
+      border-radius:9px;
       background:var(--surface)!important;
       color:var(--ink);
       font-family:inherit;
@@ -330,7 +314,7 @@
       grid-column:1 / -1;
       color:var(--muted);
       font-size:13px;
-      padding:6px 4px 0;
+      padding:2px 4px 0;
     }
     .perception-hidden{display:none!important}
     #beginnerSignal{
@@ -574,19 +558,22 @@
         font-size:14px;
       }
       .practice-play-panel{
-        display:grid;
-        grid-template-columns:1fr 1fr;
-        gap:7px;
-        padding:10px 4px 16px;
+        grid-template-columns:repeat(3,minmax(0,1fr));
+        gap:6px;
+        bottom:78px;
+        width:calc(100vw - 12px);
+        padding:8px;
+        border-radius:12px;
       }
       .practice-play-panel button{
         min-height:46px;
         text-align:center;
-        font-size:13px;
-        padding:8px 5px;
+        font-size:11px;
+        padding:7px 3px;
       }
-      #beginnerStartBtn{grid-column:1 / -1;font-size:15px}
+      #beginnerStartBtn{grid-column:auto;font-size:12px}
       .play-panel-status{grid-column:1 / -1;font-size:12px}
+      #beginnerPanel{padding-bottom:190px}
       #beginnerControls,#perceptionControls,#controls,.tool-row{display:grid;grid-template-columns:1fr;gap:8px;align-items:stretch}
       #beginnerControls label,#perceptionControls label{width:100%;min-width:0}
       #beginnerControls button,#controls button,.tool-row button,#advancedToggle{width:100%}
