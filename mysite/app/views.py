@@ -16,7 +16,9 @@ import shlex
 import subprocess
 import tempfile
 import zipfile
+import logging
 from pathlib import Path
+from PIL import Image, ImageFilter, ImageOps, UnidentifiedImageError
 from xml.etree import ElementTree
 from urllib.parse import urlparse
 
@@ -29,6 +31,7 @@ ALLOWED_AUDIO_TYPES = {
     'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/ogg', 'audio/wav',
     'audio/x-wav', 'audio/webm', 'application/octet-stream',
 }
+logger = logging.getLogger(__name__)
 
 
 def _validate_audio_upload(upload):
@@ -146,8 +149,33 @@ def _convert_score_with_audiveris(score_path, output_dir):
             if line.strip() and not line.startswith('Picked up JAVA_TOOL_OPTIONS')
         ]
         detail = '\n'.join(useful_lines[-20:])[-2000:]
-        raise RuntimeError(f'OMR could not recognize this score. {detail}'.strip())
+        logger.warning('Audiveris could not recognize %s: %s', score_path.name, detail)
+        raise RuntimeError(
+            'Nao foi possivel reconhecer a partitura. Fotografe a pagina inteira, '
+            'bem iluminada, sem inclinacao, sombras ou objetos ao redor.'
+        )
     return candidates[0]
+
+
+def _prepare_score_photo(photo_path, output_dir):
+    prepared_path = output_dir / 'camera-score.png'
+    try:
+        with Image.open(photo_path) as source:
+            image = ImageOps.exif_transpose(source)
+            if image.width * image.height > 50_000_000:
+                raise ValueError('A foto possui resolucao muito alta.')
+            image = image.convert('L')
+            target_width = min(3200, max(2200, image.width))
+            if image.width != target_width:
+                target_height = max(1, round(image.height * target_width / image.width))
+                image = image.resize((target_width, target_height), Image.Resampling.LANCZOS)
+            image = ImageOps.autocontrast(image, cutoff=(1, 1))
+            image = image.filter(ImageFilter.UnsharpMask(radius=1.2, percent=135, threshold=3))
+            image = ImageOps.expand(image, border=40, fill='white')
+            image.save(prepared_path, format='PNG', dpi=(300, 300), optimize=True)
+    except (UnidentifiedImageError, OSError) as exc:
+        raise ValueError('A imagem da camera nao pode ser lida. Use uma foto JPG ou PNG.') from exc
+    return prepared_path
 
 
 @ensure_csrf_cookie
@@ -301,8 +329,10 @@ def import_score(request):
             with input_path.open('wb') as destination:
                 for chunk in score.chunks():
                     destination.write(chunk)
-            needs_omr = extension in {'.pdf', '.jpg', '.jpeg', '.png'}
-            musicxml_path = _convert_score_with_audiveris(input_path, temp_dir) if needs_omr else input_path
+            image_extensions = {'.jpg', '.jpeg', '.png'}
+            omr_input = _prepare_score_photo(input_path, temp_dir) if extension in image_extensions else input_path
+            needs_omr = extension == '.pdf' or extension in image_extensions
+            musicxml_path = _convert_score_with_audiveris(omr_input, temp_dir) if needs_omr else input_path
             parsed = _parse_musicxml_score(_musicxml_bytes(musicxml_path))
     except (ValueError, ElementTree.ParseError, zipfile.BadZipFile) as exc:
         return JsonResponse({'status': 'error', 'message': str(exc)}, status=422)
