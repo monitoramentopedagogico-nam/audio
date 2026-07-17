@@ -2630,7 +2630,12 @@ function updateReadingPageNavigation(exercise = currentReadingExercise){
   const pageCount = readingScorePageCount(exercise);
   readingScorePage = Math.max(0, Math.min(pageCount - 1, readingScorePage));
   if(readingPageNav) readingPageNav.hidden = pageCount <= 1;
-  if(readingPageStatus) readingPageStatus.textContent = `Pagina ${readingScorePage + 1} de ${pageCount}`;
+  if(readingPageStatus){
+    const totalNotes = exercise && exercise.notes ? exercise.notes.length : 0;
+    const firstNote = totalNotes ? readingScorePage * READING_SCORE_PAGE_SIZE + 1 : 0;
+    const lastNote = Math.min(totalNotes, (readingScorePage + 1) * READING_SCORE_PAGE_SIZE);
+    readingPageStatus.textContent = `Pagina ${readingScorePage + 1} de ${pageCount} · notas ${firstNote}-${lastNote} de ${totalNotes}`;
+  }
   if(readingPrevPageBtn) readingPrevPageBtn.disabled = readingScorePage === 0;
   if(readingNextPageBtn) readingNextPageBtn.disabled = readingScorePage >= pageCount - 1;
 }
