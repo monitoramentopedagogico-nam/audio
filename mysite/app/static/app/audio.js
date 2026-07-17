@@ -1040,27 +1040,52 @@ async function playReferenceSequence(sequence, bpm, onNoteChange, beatDurations)
   const start = ctx.currentTime + 0.08;
   const playbackId = ++referencePlaybackId;
   let elapsedBeats = 0;
-  sequence.forEach((note, index)=>{
+  const scheduledNotes = sequence.map((note, index)=>{
     const noteBeats = Math.max(0.125, Number(beatDurations && beatDurations[index]) || 1);
     const noteStart = start + elapsedBeats * beat;
     const duration = Math.max(0.08, Math.min(noteBeats * beat * 0.88, noteBeats * beat - 0.03));
-    const frequency = writtenNoteToSoundingFrequency(note);
-    if(frequency) playReferenceTone(frequency, noteStart, duration);
-    if(onNoteChange){
-      const delay = Math.max(0, (noteStart - ctx.currentTime) * 1000);
-      window.setTimeout(()=>{
-        if(playbackId === referencePlaybackId) onNoteChange(index, note);
-      }, delay);
-    }
     elapsedBeats += noteBeats;
+    return {note, index, noteStart, duration};
   });
-  if(onNoteChange && sequence.length){
-    const finishDelay = Math.max(0, (start + elapsedBeats * beat - ctx.currentTime) * 1000);
-    await new Promise(resolve=>window.setTimeout(()=>{
-      if(playbackId === referencePlaybackId) onNoteChange(-1, null);
+  if(!scheduledNotes.length) return;
+
+  const finishTime = start + elapsedBeats * beat;
+  const scheduleAheadSeconds = 2.5;
+  const schedulerIntervalMs = 300;
+  let nextNoteIndex = 0;
+
+  await new Promise((resolve)=>{
+    const finish = ()=>{
+      if(playbackId === referencePlaybackId && onNoteChange) onNoteChange(-1, null);
       resolve();
-    }, finishDelay));
-  }
+    };
+    const scheduleWindow = ()=>{
+      if(playbackId !== referencePlaybackId){
+        resolve();
+        return;
+      }
+      const horizon = ctx.currentTime + scheduleAheadSeconds;
+      while(nextNoteIndex < scheduledNotes.length && scheduledNotes[nextNoteIndex].noteStart <= horizon){
+        const scheduled = scheduledNotes[nextNoteIndex];
+        const frequency = writtenNoteToSoundingFrequency(scheduled.note);
+        if(frequency) playReferenceTone(frequency, scheduled.noteStart, scheduled.duration);
+        if(onNoteChange){
+          const delay = Math.max(0, (scheduled.noteStart - ctx.currentTime) * 1000);
+          window.setTimeout(()=>{
+            if(playbackId === referencePlaybackId) onNoteChange(scheduled.index, scheduled.note);
+          }, delay);
+        }
+        nextNoteIndex += 1;
+      }
+      const remainingMs = Math.max(0, (finishTime - ctx.currentTime) * 1000);
+      if(nextNoteIndex >= scheduledNotes.length && remainingMs <= schedulerIntervalMs){
+        window.setTimeout(finish, remainingMs);
+        return;
+      }
+      window.setTimeout(scheduleWindow, Math.min(schedulerIntervalMs, Math.max(30, remainingMs)));
+    };
+    scheduleWindow();
+  });
 }
 
 function updateBeginnerMetronomeButton(){
@@ -2920,20 +2945,27 @@ async function playReadingExercise(){
   if(!currentReadingExercise) generateReadingExercise();
   if(!currentReadingExercise) return;
   currentReadingExercise.bpm = syncReadingBpm();
+  const chips = readingNotes ? Array.from(readingNotes.querySelectorAll('span')) : [];
+  const scoreNotes = readingScoreSvg ? Array.from(readingScoreSvg.querySelectorAll('.reading-note-head')) : [];
+  const longScore = currentReadingExercise.notes.length > 80;
+  let previousIndex = -1;
   await playReferenceSequence(currentReadingExercise.notes, currentReadingExercise.bpm, (index)=>{
-    const chips = readingNotes ? Array.from(readingNotes.querySelectorAll('span')) : [];
-    chips.forEach((chip, chipIndex)=>chip.classList.toggle('reference-playing', chipIndex === index));
-    const scoreNotes = readingScoreSvg ? Array.from(readingScoreSvg.querySelectorAll('.reading-note-head')) : [];
-    scoreNotes.forEach((noteHead, noteIndex)=>{
-      noteHead.classList.toggle('reference-playing', noteIndex === index);
-    });
+    if(previousIndex >= 0){
+      if(chips[previousIndex]) chips[previousIndex].classList.remove('reference-playing');
+      if(scoreNotes[previousIndex]) scoreNotes[previousIndex].classList.remove('reference-playing');
+    }
+    if(index >= 0){
+      if(chips[index]) chips[index].classList.add('reference-playing');
+      if(scoreNotes[index]) scoreNotes[index].classList.add('reference-playing');
+    }
     if(index >= 0 && scoreNotes[index] && readingScoreSvg){
       const noteX = Number(scoreNotes[index].getAttribute('cx')) || 0;
       const viewportWidth = readingScoreSvg.clientWidth;
       const maxScroll = Math.max(0, readingScoreSvg.scrollWidth - viewportWidth);
       const targetScroll = Math.max(0, Math.min(maxScroll, noteX - viewportWidth * 0.42));
-      readingScoreSvg.scrollTo({left: targetScroll, behavior: 'smooth'});
+      readingScoreSvg.scrollTo({left: targetScroll, behavior: longScore ? 'auto' : 'smooth'});
     }
+    previousIndex = index;
   }, currentReadingExercise.beats);
 }
 
