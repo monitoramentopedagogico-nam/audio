@@ -114,6 +114,9 @@ const readingSummary = document.getElementById('readingSummary');
 const generateReadingExerciseBtn = document.getElementById('generateReadingExerciseBtn');
 const playReadingExerciseBtn = document.getElementById('playReadingExerciseBtn');
 const practiceReadingExerciseBtn = document.getElementById('practiceReadingExerciseBtn');
+const scoreFileInput = document.getElementById('scoreFileInput');
+const importScoreBtn = document.getElementById('importScoreBtn');
+const scoreImportStatus = document.getElementById('scoreImportStatus');
 const exercises = document.getElementById('exercises');
 const labelCollection = document.getElementById('labelCollection');
 const downloads = document.getElementById('downloads');
@@ -1001,24 +1004,28 @@ function playReferenceTone(frequency, startTime, duration){
   vibrato.stop(startTime + duration + 0.03);
 }
 
-async function playReferenceSequence(sequence, bpm, onNoteChange){
+async function playReferenceSequence(sequence, bpm, onNoteChange, beatDurations){
   const ctx = await ensureAudioContext();
   const beat = 60 / clampBpm(bpm || 60);
-  const duration = Math.min(0.9, beat * 0.82);
   const start = ctx.currentTime + 0.08;
   const playbackId = ++referencePlaybackId;
+  let elapsedBeats = 0;
   sequence.forEach((note, index)=>{
+    const noteBeats = Math.max(0.125, Number(beatDurations && beatDurations[index]) || 1);
+    const noteStart = start + elapsedBeats * beat;
+    const duration = Math.max(0.08, Math.min(noteBeats * beat * 0.88, noteBeats * beat - 0.03));
     const frequency = writtenNoteToSoundingFrequency(note);
-    if(frequency) playReferenceTone(frequency, start + index * beat, duration);
+    if(frequency) playReferenceTone(frequency, noteStart, duration);
     if(onNoteChange){
-      const delay = Math.max(0, (start + index * beat - ctx.currentTime) * 1000);
+      const delay = Math.max(0, (noteStart - ctx.currentTime) * 1000);
       window.setTimeout(()=>{
         if(playbackId === referencePlaybackId) onNoteChange(index, note);
       }, delay);
     }
+    elapsedBeats += noteBeats;
   });
   if(onNoteChange && sequence.length){
-    const finishDelay = Math.max(0, (start + sequence.length * beat - ctx.currentTime) * 1000);
+    const finishDelay = Math.max(0, (start + elapsedBeats * beat - ctx.currentTime) * 1000);
     await new Promise(resolve=>window.setTimeout(()=>{
       if(playbackId === referencePlaybackId) onNoteChange(-1, null);
       resolve();
@@ -1225,6 +1232,7 @@ if(practiceLyricMelodyBtn) practiceLyricMelodyBtn.addEventListener('click', prac
 if(generateReadingExerciseBtn) generateReadingExerciseBtn.addEventListener('click', generateReadingExercise);
 if(playReadingExerciseBtn) playReadingExerciseBtn.addEventListener('click', playReadingExercise);
 if(practiceReadingExerciseBtn) practiceReadingExerciseBtn.addEventListener('click', practiceReadingExercise);
+if(importScoreBtn) importScoreBtn.addEventListener('click', importScoreFile);
 if(readingLevel) readingLevel.addEventListener('change', generateReadingExercise);
 if(readingKey) readingKey.addEventListener('change', generateReadingExercise);
 if(readingMeter) readingMeter.addEventListener('change', generateReadingExercise);
@@ -2507,12 +2515,16 @@ function appendReadingLedgerLines(svg, x, y){
 
 function renderReadingScore(exercise){
   if(!readingScoreSvg || !exercise) return;
-  const width = 680;
+  const width = Math.min(12000, Math.max(680, exercise.notes.length * 54 + 160));
   const height = 168;
   const staffTop = 44;
   const lineGap = 10;
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  if(width > 680){
+    svg.style.width = `${width}px`;
+    svg.style.maxWidth = 'none';
+  }
   svg.setAttribute('role', 'img');
   svg.setAttribute('aria-label', `Partitura de leitura: ${exercise.title}`);
 
@@ -2645,6 +2657,55 @@ function generateReadingExercise(){
   renderReadingNotes(currentReadingExercise);
 }
 
+async function importScoreFile(){
+  const file = scoreFileInput && scoreFileInput.files ? scoreFileInput.files[0] : null;
+  if(!file){
+    if(scoreImportStatus) scoreImportStatus.textContent = 'Escolha um arquivo PDF, MusicXML ou MXL.';
+    return;
+  }
+  if(importScoreBtn) importScoreBtn.disabled = true;
+  if(scoreImportStatus) scoreImportStatus.textContent = file.name.toLowerCase().endsWith('.pdf')
+    ? 'Reconhecendo a partitura. PDFs podem levar alguns minutos...'
+    : 'Lendo a partitura...';
+  try {
+    const formData = new FormData();
+    formData.append('score', file, file.name);
+    const response = await fetch('/api/import_score/', {
+      method: 'POST',
+      body: formData,
+      headers: {'X-CSRFToken': getCSRF() || ''},
+    });
+    const data = await response.json();
+    if(!response.ok || data.status !== 'ok') throw new Error(data.message || 'Nao foi possivel ler a partitura.');
+    const degrees = data.notes.map((_, index)=>String(index + 1));
+    currentReadingExercise = {
+      title: data.title || file.name,
+      key: data.notes[0],
+      meter: data.meter || '4/4',
+      bpm: clampBpm(data.bpm || 60),
+      notes: data.notes,
+      beats: data.beats,
+      degrees,
+      functions: data.notes.map(()=> 'nota reconhecida do PDF'),
+      pitchTheory: 'Confira as notas reconhecidas antes de tocar.',
+      rhythmTheory: 'As duracoes foram importadas da partitura.',
+      functionTheory: 'A primeira linha melodica reconhecida foi selecionada para o sax.',
+    };
+    if(readingBpm) readingBpm.value = currentReadingExercise.bpm;
+    if(readingSummary) readingSummary.textContent = `${currentReadingExercise.title}: ${data.notes.length} notas reconhecidas, ${currentReadingExercise.meter}, ${currentReadingExercise.bpm} BPM.`;
+    if(readingPitchTheory) readingPitchTheory.textContent = currentReadingExercise.pitchTheory;
+    if(readingRhythmTheory) readingRhythmTheory.textContent = currentReadingExercise.rhythmTheory;
+    if(readingFunctionTheory) readingFunctionTheory.textContent = currentReadingExercise.functionTheory;
+    renderReadingScore(currentReadingExercise);
+    renderReadingNotes(currentReadingExercise);
+    if(scoreImportStatus) scoreImportStatus.textContent = `${data.notes.length} notas reconhecidas. Revise a pauta e clique em Ouvir como sax.`;
+  } catch(error) {
+    if(scoreImportStatus) scoreImportStatus.textContent = error.message || 'Falha ao reconhecer a partitura.';
+  } finally {
+    if(importScoreBtn) importScoreBtn.disabled = false;
+  }
+}
+
 async function playReadingExercise(){
   if(!currentReadingExercise) generateReadingExercise();
   if(!currentReadingExercise) return;
@@ -2655,7 +2716,7 @@ async function playReadingExercise(){
     scoreNotes.forEach((noteHead, noteIndex)=>{
       noteHead.classList.toggle('reference-playing', noteIndex === index);
     });
-  });
+  }, currentReadingExercise.beats);
 }
 
 function practiceReadingExercise(){

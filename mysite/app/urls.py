@@ -15,6 +15,7 @@ urlpatterns = [
     path("locations/", views.locations_list, name="locations_list"),
     path("audio/", views.audio, name="audio"),
     path("api/fetch_chord_sheet/", views.fetch_chord_sheet, name="fetch_chord_sheet"),
+    path("api/import_score/", views.import_score, name="import_score"),
     path("api/upload_audio/", views.upload_audio, name="upload_audio"),
     path("api/upload_sample/", views.upload_sample, name="upload_sample"),
     path("api/sync_local_data/", views.sync_local_data, name="sync_local_data"),

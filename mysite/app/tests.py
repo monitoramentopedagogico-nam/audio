@@ -102,3 +102,23 @@ class UploadSecurityTests(TestCase):
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_imports_musicxml_as_playable_notes(self):
+        xml = b'''<?xml version="1.0" encoding="UTF-8"?>
+        <score-partwise version="4.0">
+          <work><work-title>Teste de leitura</work-title></work>
+          <part-list><score-part id="P1"><part-name>Sax</part-name></score-part></part-list>
+          <part id="P1"><measure number="1">
+            <attributes><divisions>2</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+            <direction><sound tempo="72"/></direction>
+            <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
+            <note><pitch><step>A</step><alter>1</alter><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
+          </measure></part>
+        </score-partwise>'''
+        score = SimpleUploadedFile('score.musicxml', xml, content_type='application/vnd.recordare.musicxml+xml')
+        response = self.client.post(reverse('import_score'), {'score': score})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['notes'], ['G4', 'A#4'])
+        self.assertEqual(response.json()['beats'], [1.0, 2.0])
+        self.assertEqual(response.json()['bpm'], 72)
+        self.assertEqual(response.json()['meter'], '4/4')

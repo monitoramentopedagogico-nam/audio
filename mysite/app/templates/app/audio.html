@@ -415,6 +415,20 @@
     }
     .progress-overview-card strong,.profile-card strong{display:block;margin-bottom:6px}
     .stage-back{margin-bottom:12px}
+    .score-import-panel{
+      display:flex;
+      gap:10px;
+      align-items:end;
+      flex-wrap:wrap;
+      margin:12px 0 16px;
+      padding:12px;
+      border:1px solid #d7c18e;
+      border-radius:8px;
+      background:var(--gold-soft);
+    }
+    .score-import-panel label{display:grid;gap:5px;flex:1 1 280px;font-weight:700}
+    .score-import-panel input{padding:7px;width:100%}
+    #scoreImportStatus{flex:1 1 100%;margin:0;color:var(--muted)}
     #advancedToggle{background:var(--header);color:#fff;border-color:var(--header)}
     .advanced-hidden{display:none!important}
     #advancedTools{
@@ -504,6 +518,7 @@
       min-height:140px;
     }
     #scoreContainer svg{width:100%;max-width:620px;height:auto;display:block}
+    #readingScoreSvg{max-width:100%;overflow-x:auto}
     #readingScoreSvg svg{width:100%;max-width:720px;height:auto;display:block}
     #readingScoreSvg .reading-note-head{
       transition:fill .1s ease,stroke .1s ease,filter .1s ease,transform .1s ease;
@@ -832,6 +847,13 @@
     <button class="stage-back" type="button" data-open-stage="practice">&larr; Voltar para pr&aacute;tica</button>
     <h3>Leitura e execu&ccedil;&atilde;o com partitura</h3>
     <p>Escolha um foco de teoria musical, ou&ccedil;a a refer&ecirc;ncia e pratique lendo a pauta nota por nota.</p>
+    <div class="score-import-panel">
+      <label>Importar partitura
+        <input id="scoreFileInput" type="file" accept="application/pdf,.pdf,.musicxml,.xml,.mxl">
+      </label>
+      <button id="importScoreBtn" type="button">Ler PDF e preparar execu&ccedil;&atilde;o</button>
+      <p id="scoreImportStatus" role="status">Use PDF impresso, MusicXML ou MXL. Para maior precis&atilde;o, prefira uma linha mel&oacute;dica em clave de sol.</p>
+    </div>
     <div class="tool-row">
       <label>N&iacute;vel:
         <select id="readingLevel">

@@ -11,12 +11,20 @@ import html
 import re
 import urllib.request
 import binascii
+import os
+import shlex
+import subprocess
+import tempfile
+import zipfile
+from pathlib import Path
+from xml.etree import ElementTree
 from urllib.parse import urlparse
 
 
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
 MAX_SYNC_SESSIONS = 100
 MAX_SYNC_SAMPLES = 20
+MAX_SCORE_BYTES = 15 * 1024 * 1024
 ALLOWED_AUDIO_TYPES = {
     'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/ogg', 'audio/wav',
     'audio/x-wav', 'audio/webm', 'application/octet-stream',
@@ -30,6 +38,100 @@ def _validate_audio_upload(upload):
     if content_type and content_type not in ALLOWED_AUDIO_TYPES:
         return HttpResponseBadRequest('Unsupported audio format.')
     return None
+
+
+def _musicxml_bytes(path):
+    if path.suffix.lower() != '.mxl':
+        return path.read_bytes()
+    with zipfile.ZipFile(path) as archive:
+        candidates = [
+            name for name in archive.namelist()
+            if name.lower().endswith(('.musicxml', '.xml')) and not name.startswith('META-INF/')
+        ]
+        if not candidates:
+            raise ValueError('MusicXML file not found inside MXL.')
+        if archive.getinfo(candidates[0]).file_size > MAX_SCORE_BYTES:
+            raise ValueError('The expanded MusicXML exceeds the 15 MB limit.')
+        return archive.read(candidates[0])
+
+
+def _parse_musicxml_score(xml_bytes):
+    root = ElementTree.fromstring(xml_bytes)
+    for element in root.iter():
+        if '}' in element.tag:
+            element.tag = element.tag.rsplit('}', 1)[1]
+
+    part = root.find('./part')
+    if part is None:
+        raise ValueError('No musical part was found.')
+
+    title = root.findtext('./work/work-title') or root.findtext('./movement-title') or 'Partitura importada'
+    divisions = 1
+    bpm = 60
+    meter = '4/4'
+    notes = []
+    beats = []
+    selected_voice = None
+
+    for measure in part.findall('./measure'):
+        divisions_text = measure.findtext('./attributes/divisions')
+        if divisions_text:
+            divisions = max(1, int(float(divisions_text)))
+        beat_count = measure.findtext('./attributes/time/beats')
+        beat_type = measure.findtext('./attributes/time/beat-type')
+        if beat_count and beat_type:
+            meter = f'{beat_count}/{beat_type}'
+        sound = measure.find('./direction/sound[@tempo]')
+        if sound is not None:
+            bpm = max(30, min(240, round(float(sound.attrib['tempo']))))
+
+        for note in measure.findall('./note'):
+            if note.find('./grace') is not None or note.find('./chord') is not None:
+                continue
+            voice = note.findtext('./voice') or '1'
+            if selected_voice is None and note.find('./rest') is None:
+                selected_voice = voice
+            if voice != (selected_voice or voice) or note.find('./rest') is not None:
+                continue
+            step = note.findtext('./pitch/step')
+            octave = note.findtext('./pitch/octave')
+            if not step or octave is None:
+                continue
+            alter = int(float(note.findtext('./pitch/alter') or 0))
+            accidental = '#' * alter if alter > 0 else 'b' * abs(alter)
+            duration = max(0.125, float(note.findtext('./duration') or divisions) / divisions)
+            notes.append(f'{step.upper()}{accidental}{octave}')
+            beats.append(duration)
+            if len(notes) >= 256:
+                break
+        if len(notes) >= 256:
+            break
+
+    if not notes:
+        raise ValueError('No playable melody was recognized in the first part.')
+    return {'title': title, 'notes': notes, 'beats': beats, 'bpm': bpm, 'meter': meter}
+
+
+def _convert_pdf_with_audiveris(pdf_path, output_dir):
+    command = shlex.split(os.getenv('AUDIVERIS_COMMAND', 'audiveris'))
+    try:
+        result = subprocess.run(
+            [*command, '-batch', '-export', '-output', str(output_dir), '--', str(pdf_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            env={**os.environ, 'JAVA_TOOL_OPTIONS': os.getenv('JAVA_TOOL_OPTIONS', '-Xmx3g')},
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError('The OMR engine is not installed on the server.') from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError('PDF recognition exceeded the three-minute limit.') from exc
+    candidates = list(output_dir.rglob('*.mxl')) + list(output_dir.rglob('*.musicxml')) + list(output_dir.rglob('*.xml'))
+    if result.returncode != 0 or not candidates:
+        detail = (result.stderr or result.stdout or '').strip()[-600:]
+        raise RuntimeError(f'OMR could not recognize this score. {detail}'.strip())
+    return candidates[0]
 
 
 @ensure_csrf_cookie
@@ -162,6 +264,35 @@ def fetch_chord_sheet(request):
         return JsonResponse({'status': 'error', 'message': 'Nao encontrei a cifra nessa pagina.'}, status=422)
 
     return JsonResponse({'status': 'ok', 'title': title, 'content': cifra, 'source': 'cifra_melodica' if is_cifra_melodica else 'cifra_club'})
+
+
+@login_required
+@require_POST
+def import_score(request):
+    score = request.FILES.get('score')
+    if not score:
+        return HttpResponseBadRequest('Choose a PDF, MusicXML, XML, or MXL file.')
+    if score.size > MAX_SCORE_BYTES:
+        return HttpResponseBadRequest('The score exceeds the 15 MB limit.')
+    extension = Path(score.name).suffix.lower()
+    if extension not in {'.pdf', '.musicxml', '.xml', '.mxl'}:
+        return HttpResponseBadRequest('Unsupported score format.')
+
+    try:
+        with tempfile.TemporaryDirectory(prefix='score-omr-') as temp_name:
+            temp_dir = Path(temp_name)
+            input_path = temp_dir / f'input{extension}'
+            with input_path.open('wb') as destination:
+                for chunk in score.chunks():
+                    destination.write(chunk)
+            musicxml_path = _convert_pdf_with_audiveris(input_path, temp_dir) if extension == '.pdf' else input_path
+            parsed = _parse_musicxml_score(_musicxml_bytes(musicxml_path))
+    except (ValueError, ElementTree.ParseError, zipfile.BadZipFile) as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=422)
+    except RuntimeError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=503)
+
+    return JsonResponse({'status': 'ok', **parsed})
 
 
 @login_required

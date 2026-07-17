@@ -101,3 +101,11 @@ No deploy pela aba GitHub/Dockerfile do Easypanel, `POSTGRES_HOST=db` só funcio
 
 O app escuta na porta `8080`. O HTTPS deve ser feito pelo proxy/domínio do Easypanel.
 
+### Leitura de partitura em PDF
+
+O container instala o Audiveris 5.10.2 para converter partituras impressas em PDF para MusicXML. Na tela **Praticar > Leitura musical**, envie um arquivo PDF, MusicXML, XML ou MXL. O sistema usa a primeira linha melódica reconhecida, preserva notas, acidentes, durações, compasso e BPM e permite ouvir ou carregar o resultado na prática guiada.
+
+O reconhecimento de PDF pode levar alguns minutos. Use preferencialmente partituras impressas, nítidas e com uma linha melódica em clave de sol. Partituras manuscritas e arranjos com várias vozes podem precisar de correção em um editor MusicXML.
+
+O primeiro build fica maior e mais demorado por causa do motor OMR. A VPS deve ter memória suficiente; a configuração atual limita o Java a aproximadamente 2,5 GB.
+

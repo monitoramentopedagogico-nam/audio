@@ -6,6 +6,8 @@ services:
       - "8080:8080"
     environment:
       PYTHONUNBUFFERED: "1"
+      AUDIVERIS_COMMAND: "/usr/local/bin/audiveris"
+      JAVA_TOOL_OPTIONS: "-Xmx2500m"
       DEBUG: "False"
       SECRET_KEY: "${SECRET_KEY}"
       ALLOWED_HOSTS: "${ALLOWED_HOSTS}"
