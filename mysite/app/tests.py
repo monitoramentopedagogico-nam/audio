@@ -45,6 +45,7 @@ class PrivacyTests(TestCase):
     def test_audio_page_exposes_the_four_main_learning_areas(self):
         self.client.force_login(self.user)
         response = self.client.get(reverse('audio'))
+        self.assertIn("script-src 'self'", response.headers['Content-Security-Policy'])
         self.assertEqual(response.status_code, 200)
         for stage in ('practice', 'repertoire', 'progress', 'profile'):
             self.assertContains(response, f'data-stage-target="{stage}"')
@@ -123,6 +124,12 @@ class UploadSecurityTests(TestCase):
         self.assertEqual(response.json()['bpm'], 72)
         self.assertEqual(response.json()['meter'], '4/4')
         self.assertEqual(response.json()['measure_starts'], [])
+
+    def test_rejects_score_with_falsified_extension(self):
+        fake_score = SimpleUploadedFile('score.pdf', b'<script>alert(1)</script>', content_type='application/pdf')
+        response = self.client.post(reverse('import_score'), {'score': fake_score})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('conteudo', response.json()['message'])
 
     def test_user_can_save_and_reopen_own_score(self):
         self.client.force_login(self.user)

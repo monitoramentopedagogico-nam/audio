@@ -283,6 +283,9 @@ let currentArrangement = null;
 let currentLyricMelody = null;
 let currentReadingExercise = null;
 let readingScorePage = 0;
+let readingOsmd = null;
+let readingOsmdRenderPromise = null;
+let readingOsmdRenderToken = 0;
 
 let MIN_NOTE_RMS = 0.003;
 let SILENCE_RMS = 0.0015;
@@ -2641,8 +2644,100 @@ function setReadingScorePage(page){
   if(readingScoreSvg) readingScoreSvg.scrollLeft = 0;
 }
 
-function renderReadingScore(exercise){
+function escapeMusicXmlText(value){
+  return String(value || '').replace(/[&<>"']/g, character=>({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&apos;'
+  }[character]));
+}
+
+function readingPageMusicXml(exercise){
+  const pageStart = readingScorePage * READING_SCORE_PAGE_SIZE;
+  const pageEnd = Math.min(exercise.notes.length, pageStart + READING_SCORE_PAGE_SIZE);
+  const notes = exercise.notes.slice(pageStart, pageEnd);
+  const beats = exercise.beats.slice(pageStart, pageEnd);
+  const localMeasureStarts = new Set((exercise.measureStarts || [])
+    .filter(index=>index > pageStart && index < pageEnd)
+    .map(index=>index - pageStart));
+  const meterMatch = String(exercise.meter || '4/4').match(/^(\d+)\/(\d+)$/);
+  const meterBeats = meterMatch ? Number(meterMatch[1]) : 4;
+  const meterType = meterMatch ? Number(meterMatch[2]) : 4;
+  const measureCapacity = meterBeats * 4 / meterType;
+  const divisions = 8;
+  let measureNumber = 1 + (exercise.measureStarts || []).filter(index=>index <= pageStart).length;
+  let measureBeats = 0;
+  let xml = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0">`;
+  xml += `<work><work-title>${escapeMusicXmlText(exercise.title)}</work-title></work>`;
+  xml += '<part-list><score-part id="P1"><part-name>Sax</part-name></score-part></part-list><part id="P1">';
+  const openMeasure = (includeAttributes)=>{
+    xml += `<measure number="${measureNumber}">`;
+    if(includeAttributes){
+      xml += `<attributes><divisions>${divisions}</divisions><key><fifths>0</fifths></key>`;
+      xml += `<time><beats>${meterBeats}</beats><beat-type>${meterType}</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>`;
+      xml += `<direction placement="above"><sound tempo="${clampBpm(exercise.bpm || 60)}"/></direction>`;
+    }
+  };
+  openMeasure(true);
+  notes.forEach((note, index)=>{
+    const durationBeats = Math.max(0.125, Number(beats[index]) || 1);
+    const calculatedBoundary = index > 0 && !localMeasureStarts.size && measureBeats >= measureCapacity - 0.001;
+    if(index > 0 && (localMeasureStarts.has(index) || calculatedBoundary)){
+      xml += '</measure>';
+      measureNumber += 1;
+      measureBeats = 0;
+      openMeasure(false);
+    }
+    const match = String(note).match(/^([A-G])([#b]*)(-?\d+)$/);
+    if(!match) return;
+    const alter = (match[2].match(/#/g) || []).length - (match[2].match(/b/g) || []).length;
+    const type = durationBeats <= 0.5 ? 'eighth' : durationBeats <= 1 ? 'quarter' : durationBeats <= 2 ? 'half' : 'whole';
+    xml += `<note><pitch><step>${match[1]}</step>${alter ? `<alter>${alter}</alter>` : ''}<octave>${match[3]}</octave></pitch>`;
+    xml += `<duration>${Math.max(1, Math.round(durationBeats * divisions))}</duration><voice>1</voice><type>${type}</type></note>`;
+    measureBeats += durationBeats;
+  });
+  return `${xml}</measure></part></score-partwise>`;
+}
+
+function positionReadingOsmdCursor(localIndex){
+  if(!readingOsmd || !readingOsmd.cursor) return;
+  readingOsmd.cursor.reset();
+  readingOsmd.cursor.show();
+  for(let index = 0; index < localIndex; index += 1) readingOsmd.cursor.next();
+}
+
+function renderReadingScoreWithOsmd(exercise){
+  const token = ++readingOsmdRenderToken;
+  updateReadingPageNavigation(exercise);
+  readingScoreSvg.classList.add('osmd-rendering');
+  readingScoreSvg.innerHTML = '';
+  if(!readingOsmd){
+    readingOsmd = new opensheetmusicdisplay.OpenSheetMusicDisplay(readingScoreSvg, {
+      autoResize: true,
+      backend: 'svg',
+      drawTitle: false,
+      drawingParameters: 'compacttight',
+      followCursor: false,
+    });
+  }
+  readingOsmdRenderPromise = readingOsmd.load(readingPageMusicXml(exercise)).then(()=>{
+    if(token !== readingOsmdRenderToken) return;
+    readingOsmd.render();
+    positionReadingOsmdCursor(0);
+    readingOsmd.cursor.hide();
+  }).catch(error=>{
+    console.error('OSMD render failed, using simple score renderer', error);
+    readingOsmd = null;
+    readingScoreSvg.classList.remove('osmd-rendering');
+    renderReadingScore(exercise, true);
+  });
+}
+
+function renderReadingScore(exercise, forceManual = false){
   if(!readingScoreSvg || !exercise) return;
+  if(!forceManual && window.opensheetmusicdisplay && window.opensheetmusicdisplay.OpenSheetMusicDisplay){
+    renderReadingScoreWithOsmd(exercise);
+    return;
+  }
+  readingScoreSvg.classList.remove('osmd-rendering');
   const sourceExercise = exercise;
   const pageStart = readingScorePage * READING_SCORE_PAGE_SIZE;
   const pageEnd = Math.min(sourceExercise.notes.length, pageStart + READING_SCORE_PAGE_SIZE);
@@ -3031,6 +3126,13 @@ async function playReadingExercise(){
         renderReadingNotes(currentReadingExercise);
         if(readingScoreSvg) readingScoreSvg.scrollLeft = 0;
       }
+      if(readingOsmd && readingOsmdRenderPromise){
+        const cursorPage = targetPage;
+        const localIndex = index % READING_SCORE_PAGE_SIZE;
+        readingOsmdRenderPromise.then(()=>{
+          if(readingScorePage === cursorPage) positionReadingOsmdCursor(localIndex);
+        });
+      }
       const activeChip = readingNotes ? readingNotes.querySelector(`[data-score-note-index="${index}"]`) : null;
       const activeNote = readingScoreSvg ? readingScoreSvg.querySelector(`[data-score-note-index="${index}"]`) : null;
       if(activeChip) activeChip.classList.add('reference-playing');
@@ -3042,6 +3144,8 @@ async function playReadingExercise(){
         const targetScroll = Math.max(0, Math.min(maxScroll, noteX - viewportWidth * 0.42));
         readingScoreSvg.scrollTo({left: targetScroll, behavior: longScore ? 'auto' : 'smooth'});
       }
+    } else if(readingOsmd && readingOsmd.cursor){
+      readingOsmd.cursor.hide();
     }
     previousIndex = index;
   }, currentReadingExercise.beats);

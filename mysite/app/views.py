@@ -4,6 +4,7 @@ from django.views.decorators.http import require_POST, require_http_methods
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
+from django.core.cache import cache
 from django.utils import timezone
 import json
 import base64
@@ -27,11 +28,30 @@ MAX_AUDIO_BYTES = 20 * 1024 * 1024
 MAX_SYNC_SESSIONS = 100
 MAX_SYNC_SAMPLES = 20
 MAX_SCORE_BYTES = 15 * 1024 * 1024
+SCORE_IMPORT_LIMIT = 5
+SCORE_IMPORT_WINDOW_SECONDS = 300
 ALLOWED_AUDIO_TYPES = {
     'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/ogg', 'audio/wav',
     'audio/x-wav', 'audio/webm', 'application/octet-stream',
 }
 logger = logging.getLogger(__name__)
+
+
+def _valid_score_signature(upload, extension):
+    header = upload.read(32)
+    upload.seek(0)
+    stripped = header.lstrip(b'\xef\xbb\xbf\x00\t\r\n ')
+    if extension == '.pdf':
+        return header.startswith(b'%PDF-')
+    if extension in {'.jpg', '.jpeg'}:
+        return header.startswith(b'\xff\xd8\xff')
+    if extension == '.png':
+        return header.startswith(b'\x89PNG\r\n\x1a\n')
+    if extension == '.mxl':
+        return header.startswith(b'PK\x03\x04')
+    if extension in {'.xml', '.musicxml'}:
+        return stripped.startswith(b'<?xml') or stripped.startswith(b'<score-')
+    return False
 
 
 def _validate_audio_upload(upload):
@@ -321,6 +341,19 @@ def import_score(request):
     extension = Path(score.name).suffix.lower()
     if extension not in {'.pdf', '.jpg', '.jpeg', '.png', '.musicxml', '.xml', '.mxl'}:
         return HttpResponseBadRequest('Unsupported score format.')
+    if not _valid_score_signature(score, extension):
+        return JsonResponse(
+            {'status': 'error', 'message': 'O conteudo do arquivo nao corresponde ao formato informado.'},
+            status=400,
+        )
+    rate_key = f'score-import:{request.user.pk}'
+    attempts = int(cache.get(rate_key, 0))
+    if attempts >= SCORE_IMPORT_LIMIT:
+        return JsonResponse(
+            {'status': 'error', 'message': 'Limite de reconhecimento atingido. Aguarde cinco minutos.'},
+            status=429,
+        )
+    cache.set(rate_key, attempts + 1, SCORE_IMPORT_WINDOW_SECONDS)
 
     try:
         with tempfile.TemporaryDirectory(prefix='score-omr-') as temp_name:
