@@ -108,6 +108,8 @@
       align-items:start;
     }
     .dashboard-main,.dashboard-side{display:grid;gap:16px}
+    .dashboard-page:not(.stage-practice) .dashboard-shell{grid-template-columns:minmax(0,1fr)}
+    .dashboard-page:not(.stage-practice) .dashboard-side{display:none}
     .dashboard-card,
     #beginnerPanel,
     .tool-section,
@@ -408,6 +410,27 @@
       justify-content:flex-end;
       gap:8px;
     }
+    .practice-quick-actions{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:8px;
+      margin:0 0 14px;
+    }
+    .practice-quick-actions button{background:var(--surface-soft);font-weight:700}
+    .section-intro{margin:-4px 0 14px;color:var(--muted)}
+    .progress-overview-grid,.profile-grid{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:10px;
+    }
+    .progress-overview-card,.profile-card{
+      border:1px solid var(--line);
+      border-radius:8px;
+      padding:14px;
+      background:var(--surface-soft);
+    }
+    .progress-overview-card strong,.profile-card strong{display:block;margin-bottom:6px}
+    .stage-back{margin-bottom:12px}
     #advancedToggle{background:var(--header);color:#fff;border-color:var(--header)}
     .advanced-hidden{display:none!important}
     #advancedTools{
@@ -573,6 +596,7 @@
       #routineSequence span{flex:1 1 calc(50% - 5px);text-align:center;padding:8px 6px}
       #routineNav{display:grid;grid-template-columns:1fr 1fr;gap:8px}
       .reading-theory-grid{grid-template-columns:1fr}
+      .practice-quick-actions,.progress-overview-grid,.profile-grid{grid-template-columns:1fr}
       #realtime>div{grid-template-columns:1fr!important}
       input[type="number"],select{width:100%!important}
       .tool-row input[type="url"]{min-width:0;width:100%}
@@ -612,14 +636,20 @@
         </section>
 
         <nav class="app-stage-nav" aria-label="Etapas do aplicativo">
-          <button class="stage-button is-active" type="button" data-stage-target="beginner">Modo iniciante</button>
-          <button class="stage-button" type="button" data-stage-target="arrangement">Arranjo por cifra</button>
-          <button class="stage-button" type="button" data-stage-target="reading">Leitura</button>
-          <button class="stage-button" type="button" data-stage-target="history">Registros</button>
+          <button class="stage-button is-active" type="button" data-stage-target="practice">Praticar</button>
+          <button class="stage-button" type="button" data-stage-target="repertoire">Repert&oacute;rio</button>
+          <button class="stage-button" type="button" data-stage-target="progress">Progresso</button>
+          <button class="stage-button" type="button" data-stage-target="profile">Perfil</button>
         </nav>
 
   <section id="beginnerPanel" aria-live="polite">
     <h2>Modo iniciante</h2>
+    <p class="section-intro">Escolha uma atividade, ou&ccedil;a a refer&ecirc;ncia e avance uma nota por vez.</p>
+    <div class="practice-quick-actions" aria-label="Atividades de pr&aacute;tica">
+      <button type="button" data-practice-exercise="routine_level_1">Rotina di&aacute;ria</button>
+      <button type="button" data-practice-exercise="perception_degrees">Percep&ccedil;&atilde;o</button>
+      <button type="button" data-open-stage="reading">Leitura musical</button>
+    </div>
     <div id="beginnerControls">
       <label>Exerc&iacute;cio
         <select id="beginnerExercise">
@@ -800,6 +830,7 @@
   </div>
 
   <div id="readingExecutionBuilder" class="tool-section">
+    <button class="stage-back" type="button" data-open-stage="practice">&larr; Voltar para pr&aacute;tica</button>
     <h3>Leitura e execu&ccedil;&atilde;o com partitura</h3>
     <p>Escolha um foco de teoria musical, ou&ccedil;a a refer&ecirc;ncia e pratique lendo a pauta nota por nota.</p>
     <div class="tool-row">
@@ -895,6 +926,33 @@
     </div>
     <div id="lyricMelodyOutput"></div>
   </div>
+
+  <section id="progressOverview" class="tool-section">
+    <h2>Seu progresso</h2>
+    <p class="section-intro">Acompanhe sua const&acirc;ncia, reveja grava&ccedil;&otilde;es e identifique o pr&oacute;ximo objetivo.</p>
+    <div class="progress-overview-grid">
+      <div class="progress-overview-card"><strong>Desempenho</strong><span>Veja afina&ccedil;&atilde;o e exerc&iacute;cios conclu&iacute;dos.</span><p><a href="/dashboard/">Abrir painel</a></p></div>
+      <div class="progress-overview-card"><strong>Grava&ccedil;&otilde;es</strong><span>Compare seu som ao longo do tempo.</span><p><a href="/recordings/">Ver grava&ccedil;&otilde;es</a></p></div>
+      <div class="progress-overview-card"><strong>Sincroniza&ccedil;&atilde;o</strong><span id="progressSyncStatus">Dados locais protegidos e sincronizados.</span><p><button id="progressSyncBtn" type="button">Sincronizar agora</button></p></div>
+    </div>
+  </section>
+
+  <section id="profilePanel" class="tool-section">
+    <h2>Perfil e configura&ccedil;&otilde;es</h2>
+    <p class="section-intro">Configure o instrumento e o microfone antes de iniciar a pr&aacute;tica.</p>
+    <div class="profile-grid">
+      <div class="profile-card"><strong>Instrumento</strong><span id="profileInstrumentLabel">Sax alto (Eb)</span><p><button id="profileInstrumentBtn" type="button">Alterar instrumento</button></p></div>
+      <div class="profile-card"><strong>Microfone</strong><span>Calibre para melhorar a leitura das notas.</span><p><button id="profileCalibrateBtn" type="button">Calibrar microfone</button></p></div>
+      <div class="profile-card"><strong>Ferramentas avan&ccedil;adas</strong><span>Espectro, HNR, dataset e exporta&ccedil;&otilde;es.</span><p><button id="profileAdvancedBtn" type="button">Abrir ferramentas</button></p></div>
+    </div>
+    <p><a href="/accounts/logout/">Sair da conta</a></p>
+  </section>
+
+  <section id="advancedEntry" class="tool-section">
+    <button class="stage-back" type="button" data-open-stage="profile">&larr; Voltar para perfil</button>
+    <h2>Ferramentas avan&ccedil;adas</h2>
+    <p>Recursos t&eacute;cnicos para an&aacute;lise detalhada, grava&ccedil;&atilde;o e coleta de dados.</p>
+  </section>
 
   <div id="exercises" class="tool-section">
     <h3>Exercícios e feedback</h3>
@@ -1035,7 +1093,7 @@
       </aside>
     </div>
     <nav class="app-bottom-nav" aria-label="Navega&ccedil;&atilde;o principal">
-      <button class="bottom-nav-button is-active" type="button" data-stage-target="beginner" aria-label="Modo iniciante">
+      <button class="bottom-nav-button is-active" type="button" data-stage-target="practice" aria-label="Praticar">
         <svg viewBox="0 0 48 48" aria-hidden="true">
           <path d="M15 35c4-7 7-13 7-23 0-4 3-7 7-7 4 0 7 3 7 7 0 3-2 5-5 5h-7" />
           <path d="M10 38c5 4 14 2 18-4 2-4 1-8-2-10-3-2-8-1-10 3" />
@@ -1046,33 +1104,33 @@
           <circle cx="24" cy="27" r="1.5" />
           <circle cx="21" cy="32" r="1.5" />
         </svg>
-        <span>Sax</span>
+        <span>Praticar</span>
       </button>
-      <button class="bottom-nav-button" type="button" data-stage-target="arrangement" aria-label="Arranjo por cifra">
+      <button class="bottom-nav-button" type="button" data-stage-target="repertoire" aria-label="Repert&oacute;rio e cifras">
         <svg viewBox="0 0 48 48" aria-hidden="true">
           <rect x="8" y="7" width="32" height="34" rx="2" />
           <path d="M14 7v34M20 7v34M26 7v34M32 7v34" />
           <path d="M14 25h6M26 25h6" />
         </svg>
-        <span>Cifras</span>
+        <span>Repert&oacute;rio</span>
       </button>
-      <button class="bottom-nav-button" type="button" data-stage-target="reading" aria-label="Leitura e execu&ccedil;&atilde;o">
+      <button class="bottom-nav-button" type="button" data-stage-target="progress" aria-label="Progresso">
         <svg viewBox="0 0 48 48" aria-hidden="true">
           <path d="M5 18 24 8l19 10-19 10L5 18Z" />
           <path d="M13 23v8c6 5 16 5 22 0v-8" />
           <path d="M41 20v11" />
           <path d="M39 34h4" />
         </svg>
-        <span>Leitura</span>
+        <span>Progresso</span>
       </button>
-      <button class="bottom-nav-button" type="button" data-stage-target="history" aria-label="Registros e configura&ccedil;&otilde;es">
+      <button class="bottom-nav-button" type="button" data-stage-target="profile" aria-label="Perfil e configura&ccedil;&otilde;es">
         <svg viewBox="0 0 48 48" aria-hidden="true">
           <circle cx="24" cy="24" r="6" />
           <path d="M24 5v6M24 37v6M5 24h6M37 24h6" />
           <path d="m10 10 4 4M34 34l4 4M38 10l-4 4M14 34l-4 4" />
           <path d="M18 7h12l2 5 5 2 4 10-4 10-5 2-2 5H18l-2-5-5-2-4-10 4-10 5-2 2-5Z" />
         </svg>
-        <span>Op&ccedil;&otilde;es</span>
+        <span>Perfil</span>
       </button>
     </nav>
   </div>

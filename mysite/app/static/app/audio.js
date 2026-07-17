@@ -119,6 +119,17 @@ const labelCollection = document.getElementById('labelCollection');
 const downloads = document.getElementById('downloads');
 const suggestions = document.getElementById('suggestions');
 const stageButtons = Array.from(document.querySelectorAll('[data-stage-target]'));
+const openStageButtons = Array.from(document.querySelectorAll('[data-open-stage]'));
+const practiceExerciseButtons = Array.from(document.querySelectorAll('[data-practice-exercise]'));
+const progressOverview = document.getElementById('progressOverview');
+const profilePanel = document.getElementById('profilePanel');
+const advancedEntry = document.getElementById('advancedEntry');
+const progressSyncBtn = document.getElementById('progressSyncBtn');
+const progressSyncStatus = document.getElementById('progressSyncStatus');
+const profileInstrumentLabel = document.getElementById('profileInstrumentLabel');
+const profileInstrumentBtn = document.getElementById('profileInstrumentBtn');
+const profileCalibrateBtn = document.getElementById('profileCalibrateBtn');
+const profileAdvancedBtn = document.getElementById('profileAdvancedBtn');
 const dashboardPage = document.querySelector('.dashboard-page');
 
 function resizeCanvas(){ canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; }
@@ -155,14 +166,23 @@ function compactStageElements(){
     scorePanel,
     reference,
   ];
+  const progressPanels = [progressOverview, downloads, suggestions, recordingPanel].filter(Boolean);
+  const profilePanels = [profilePanel].filter(Boolean);
+  const dedicatedPanels = [
+    arrangementBuilder, lyricMelodyBuilder, readingExecutionBuilder,
+    ...progressPanels, ...profilePanels,
+  ].filter(Boolean);
+  const advancedPanels = allAdvanced.filter(el => !dedicatedPanels.includes(el));
   return {
     allAdvanced,
     stages: {
-      beginner: [document.getElementById('beginnerPanel'), ...livePanels],
-      arrangement: [arrangementBuilder, lyricMelodyBuilder],
+      practice: [document.getElementById('beginnerPanel')],
+      repertoire: [arrangementBuilder, lyricMelodyBuilder],
       reading: [readingExecutionBuilder],
       live: livePanels,
-      history: [controls, exercises, labelCollection, downloads, suggestions, recordingPanel],
+      progress: progressPanels,
+      profile: profilePanels,
+      advanced: advancedPanels,
     },
   };
 }
@@ -172,7 +192,7 @@ function showAppStage(stageName){
   const beginnerPanel = document.getElementById('beginnerPanel');
   if(beginnerPanel) beginnerPanel.classList.add('stage-hidden');
   allAdvanced.forEach(el => el.classList.add('stage-hidden'));
-  const activeStage = stages[stageName] || stages.beginner;
+  const activeStage = stages[stageName] || stages.practice;
   activeStage.forEach(el => {
     if(el) el.classList.remove('stage-hidden');
   });
@@ -185,11 +205,28 @@ function showAppStage(stageName){
     btn.classList.toggle('is-active', active);
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
+  if(dashboardPage){
+    ['practice','repertoire','progress','profile','reading','advanced'].forEach(name=>{
+      dashboardPage.classList.toggle(`stage-${name}`, name === stageName);
+    });
+  }
   resizeCanvas();
 }
 
 stageButtons.forEach(btn => {
-  btn.addEventListener('click', () => showAppStage(btn.dataset.stageTarget || 'beginner'));
+  btn.addEventListener('click', () => showAppStage(btn.dataset.stageTarget || 'practice'));
+});
+openStageButtons.forEach(btn => {
+  btn.addEventListener('click', ()=>showAppStage(btn.dataset.openStage || 'practice'));
+});
+practiceExerciseButtons.forEach(btn => {
+  btn.addEventListener('click', ()=>{
+    if(beginnerExercise){
+      beginnerExercise.value = btn.dataset.practiceExercise || 'routine_level_1';
+      beginnerExercise.dispatchEvent(new Event('change'));
+    }
+    showAppStage('practice');
+  });
 });
 
 let pitchHistory = [];
@@ -1104,7 +1141,20 @@ if(beginnerInstrument) beginnerInstrument.addEventListener('change', ()=>{
   }
   updateDashboardSummary('', currentEstimatedPitch, centsLabel ? centsLabel.textContent : '');
   setBeginnerStatus('ready', 'Instrumento', `${getInstrumentLabel()} selecionado. A referencia e a afinacao usam a transposicao correta.`);
+  if(profileInstrumentLabel) profileInstrumentLabel.textContent = getInstrumentLabel();
 });
+if(profileInstrumentBtn) profileInstrumentBtn.addEventListener('click', ()=>{
+  showAppStage('practice');
+  if(beginnerInstrument){
+    beginnerInstrument.focus();
+    beginnerInstrument.scrollIntoView({behavior:'smooth', block:'center'});
+  }
+});
+if(profileCalibrateBtn) profileCalibrateBtn.addEventListener('click', ()=>{
+  showAppStage('practice');
+  if(calibrateMicBtn) calibrateMicBtn.click();
+});
+if(profileAdvancedBtn) profileAdvancedBtn.addEventListener('click', ()=>showAppStage('advanced'));
 if(beginnerTargetNote) beginnerTargetNote.addEventListener('change', ()=>{
   if(isPerceptionDegreeMode()){
     const changed = setPerceptionKeyFromTarget(beginnerTargetNote.value);
@@ -1306,6 +1356,11 @@ async function markSampleSynced(id){
 }
 
 if(syncLocalDataBtn) syncLocalDataBtn.addEventListener('click', ()=>syncLocalData());
+if(progressSyncBtn) progressSyncBtn.addEventListener('click', async ()=>{
+  if(progressSyncStatus) progressSyncStatus.textContent = 'Sincronizando...';
+  await syncLocalData();
+  if(progressSyncStatus && syncStatusEl) progressSyncStatus.textContent = syncStatusEl.textContent;
+});
 window.addEventListener('online', ()=>syncLocalData());
 window.addEventListener('load', ()=>syncLocalData());
 
@@ -2583,7 +2638,7 @@ function practiceReadingExercise(){
     applyStandaloneExercise();
     if(document.getElementById('beginnerRoutine')) document.getElementById('beginnerRoutine').style.display = '';
     setBeginnerStatus('ready', 'Leitura', 'Partitura carregada. Clique em Tocar para praticar nota por nota.');
-    showAppStage('beginner');
+    showAppStage('practice');
   }
 }
 
@@ -2657,6 +2712,7 @@ function practiceLyricMelody(){
     applyStandaloneExercise();
     if(document.getElementById('beginnerRoutine')) document.getElementById('beginnerRoutine').style.display = '';
     setBeginnerStatus('ready', 'Cifra melodica', 'Melodia carregada. Clique em Comecar para praticar.');
+    showAppStage('practice');
   }
 }
 
@@ -2806,6 +2862,7 @@ function useArrangementAsBeginnerPractice(){
     applyStandaloneExercise();
     if(document.getElementById('beginnerRoutine')) document.getElementById('beginnerRoutine').style.display = '';
     setBeginnerStatus('ready', 'Arranjo', 'Linha da cifra carregada. Clique em Comecar para praticar.');
+    showAppStage('practice');
   }
 }
 
@@ -3355,4 +3412,5 @@ if (listenRef) {
 }
 updateDashboardSummary('', null, '');
 generateReadingExercise();
-showAppStage('beginner');
+if(profileInstrumentLabel) profileInstrumentLabel.textContent = getInstrumentLabel();
+showAppStage('practice');

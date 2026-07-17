@@ -42,6 +42,13 @@ class PrivacyTests(TestCase):
         self.client.force_login(self.staff)
         self.assertEqual(self.client.get(reverse('locations_list')).status_code, 200)
 
+    def test_audio_page_exposes_the_four_main_learning_areas(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('audio'))
+        self.assertEqual(response.status_code, 200)
+        for stage in ('practice', 'repertoire', 'progress', 'profile'):
+            self.assertContains(response, f'data-stage-target="{stage}"')
+
 
 class UploadSecurityTests(TestCase):
     def setUp(self):
