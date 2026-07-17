@@ -2581,7 +2581,14 @@ function appendReadingBarLine(svg, x, staffTop, lineGap, measureNumber, finalBar
 
 function renderReadingScore(exercise){
   if(!readingScoreSvg || !exercise) return;
-  const width = Math.min(12000, Math.max(680, exercise.notes.length * 54 + 160));
+  const normalizedBeats = exercise.notes.map((_, index)=>Math.max(0.125, Number(exercise.beats[index]) || 1));
+  const rawSlots = normalizedBeats.map(beat=>Math.max(42, Math.min(150, beat * 54)));
+  const rawSlotsWidth = rawSlots.reduce((sum, slot)=>sum + slot, 0);
+  const maximumSlotsWidth = 11820;
+  const slotScale = rawSlotsWidth > maximumSlotsWidth ? maximumSlotsWidth / rawSlotsWidth : 1;
+  const noteSlots = rawSlots.map(slot=>slot * slotScale);
+  const slotsWidth = noteSlots.reduce((sum, slot)=>sum + slot, 0);
+  const width = Math.max(680, Math.ceil(slotsWidth + 170));
   const height = 168;
   const staffTop = 44;
   const lineGap = 10;
@@ -2631,9 +2638,7 @@ function renderReadingScore(exercise){
   time.textContent = exercise.meter;
   svg.appendChild(time);
 
-  const totalBeats = exercise.beats.reduce((sum, beat)=>sum + beat, 0);
   let cursor = 122;
-  const usableWidth = width - 160;
   const explicitMeasureStarts = new Set(exercise.measureStarts || []);
   const measureCapacity = readingMeasureCapacity(exercise.meter);
   let elapsedMeasureBeats = 0;
@@ -2646,8 +2651,8 @@ function renderReadingScore(exercise){
       appendReadingBarLine(svg, cursor, staffTop, lineGap, ++measureNumber);
       elapsedMeasureBeats = 0;
     }
-    const beat = exercise.beats[index] || 1;
-    const slot = Math.max(42, (beat / totalBeats) * usableWidth);
+    const beat = normalizedBeats[index];
+    const slot = noteSlots[index];
     const x = cursor + slot / 2;
     const y = noteYFromScientificName(note);
     appendReadingLedgerLines(svg, x, y);
