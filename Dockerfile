@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && AUDIVERIS_URL="$(grep -o 'https://[^\"]*ubuntu22\.04[^\"]*\.deb' /tmp/audiveris-release.json | head -n 1)" \
     && test -n "$AUDIVERIS_URL" \
     && curl -fsSL "$AUDIVERIS_URL" -o /tmp/audiveris.deb \
-    && apt-get install -y --no-install-recommends /tmp/audiveris.deb \
+    && dpkg-deb -x /tmp/audiveris.deb / \
     && AUDIVERIS_BIN="$(find /opt /usr -type f -iname 'audiveris' -perm /111 2>/dev/null | head -n 1)" \
     && test -n "$AUDIVERIS_BIN" \
     && ln -sf "$AUDIVERIS_BIN" /usr/local/bin/audiveris \
