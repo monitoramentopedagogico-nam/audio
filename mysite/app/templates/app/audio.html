@@ -415,6 +415,13 @@
     }
     .progress-overview-card strong,.profile-card strong{display:block;margin-bottom:6px}
     .stage-back{margin-bottom:12px}
+    .reading-disclosure{margin:10px 0;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft)}
+    .reading-disclosure > summary{padding:11px 12px;font-weight:800;color:var(--ink);cursor:pointer;list-style:none}
+    .reading-disclosure > summary::-webkit-details-marker{display:none}
+    .reading-disclosure > summary::after{content:"+";float:right;color:var(--accent);font-size:20px;line-height:1}
+    .reading-disclosure[open] > summary::after{content:"−"}
+    .reading-disclosure-content{padding:0 10px 10px}
+    .reading-disclosure-content.reading-theory-grid{margin:0}
     .score-import-panel{
       display:flex;
       gap:10px;
@@ -482,6 +489,9 @@
     .tool-row:first-child{margin-top:0}
     .tool-row label{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-weight:700}
     .tool-row input[type="url"]{min-width:280px;flex:1;padding:8px}
+    .reading-primary-actions button{font-weight:800}
+    #playReadingExerciseBtn{background:var(--accent);border-color:var(--accent);color:#fff}
+    #readingSummary{margin:10px 0 0;font-size:14px}
     #chordSheetInput,#lyricMelodyInput{
       width:100%;
       margin-top:10px;
@@ -566,6 +576,9 @@
       padding:6px 8px;
       font-weight:700;
     }
+    .reading-page-nav{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px}
+    .reading-page-nav[hidden]{display:none}
+    #readingPageStatus{min-width:110px;text-align:center;font-weight:700;color:var(--muted)}
     #noteTimeline,#feedbackList,#sessionList,#labeledList,#dlList,#suggestList,#recordingAnalysis{
       margin:8px 0 0;
       padding-left:20px;
@@ -641,6 +654,7 @@
       #readingScoreSvg svg{height:150px;width:auto;max-width:none}
       .reading-note-strip{flex-wrap:nowrap;overflow-x:auto;padding:2px 0 7px;-webkit-overflow-scrolling:touch}
       .reading-note-strip span{flex:0 0 auto;font-size:14px;padding:6px}
+      .reading-page-nav{display:grid;grid-template-columns:1fr auto 1fr}
       .practice-quick-actions,.progress-overview-grid,.profile-grid{grid-template-columns:1fr}
       #realtime>div{grid-template-columns:1fr!important}
       input[type="number"],select{width:100%!important}
@@ -886,8 +900,11 @@
   <div id="readingExecutionBuilder" class="tool-section">
     <button class="stage-back" type="button" data-open-stage="practice">&larr; Voltar para pr&aacute;tica</button>
     <h3>Leitura e execu&ccedil;&atilde;o com partitura</h3>
-    <p>Escolha um foco de teoria musical, ou&ccedil;a a refer&ecirc;ncia e pratique lendo a pauta nota por nota.</p>
-    <div class="score-import-panel">
+    <p class="section-intro">Prepare, ou&ccedil;a e pratique a partitura nota por nota.</p>
+    <details class="reading-disclosure">
+      <summary>Importar, fotografar ou abrir partitura</summary>
+      <div class="reading-disclosure-content">
+      <div class="score-import-panel">
       <label>Importar partitura
         <input id="scoreFileInput" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png,.musicxml,.xml,.mxl">
       </label>
@@ -904,8 +921,10 @@
       </div>
       <p id="savedScoreStatus" role="status">Salve a partitura atual para consultar depois.</p>
       <div id="savedScoresList"></div>
-    </div>
-    <div class="tool-row">
+      </div>
+      </div>
+    </details>
+    <div class="tool-row reading-settings-row">
       <label>N&iacute;vel:
         <select id="readingLevel">
           <option value="absolute" selected>Notas na pauta</option>
@@ -936,14 +955,22 @@
         <input id="readingBpm" type="number" value="60" min="30" max="160">
       </label>
     </div>
-    <div class="reading-theory-grid">
-      <div class="theory-card"><strong>Altura</strong><span id="readingPitchTheory">Leia a nota na clave de sol e confirme o nome antes de tocar.</span></div>
-      <div class="theory-card"><strong>Ritmo</strong><span id="readingRhythmTheory">Conte o pulso, respeite sem&iacute;nimas, m&iacute;nimas e colcheias.</span></div>
-      <div class="theory-card"><strong>Fun&ccedil;&atilde;o</strong><span id="readingFunctionTheory">Observe repouso, movimento e resolu&ccedil;&atilde;o nas notas fortes.</span></div>
-    </div>
+    <details class="reading-disclosure">
+      <summary>Orienta&ccedil;&otilde;es de leitura</summary>
+      <div class="reading-disclosure-content reading-theory-grid">
+        <div class="theory-card"><strong>Altura</strong><span id="readingPitchTheory">Leia a nota na clave de sol e confirme o nome antes de tocar.</span></div>
+        <div class="theory-card"><strong>Ritmo</strong><span id="readingRhythmTheory">Conte o pulso, respeite sem&iacute;nimas, m&iacute;nimas e colcheias.</span></div>
+        <div class="theory-card"><strong>Fun&ccedil;&atilde;o</strong><span id="readingFunctionTheory">Observe repouso, movimento e resolu&ccedil;&atilde;o nas notas fortes.</span></div>
+      </div>
+    </details>
     <div id="readingScoreSvg" aria-live="polite"></div>
+    <div id="readingPageNav" class="reading-page-nav" hidden>
+      <button id="readingPrevPageBtn" type="button">&larr; Anterior</button>
+      <span id="readingPageStatus">P&aacute;gina 1 de 1</span>
+      <button id="readingNextPageBtn" type="button">Pr&oacute;xima &rarr;</button>
+    </div>
     <div id="readingNotes" class="reading-note-strip"></div>
-    <div class="tool-row">
+    <div class="tool-row reading-primary-actions">
       <button id="generateReadingExerciseBtn" type="button">Gerar exerc&iacute;cio</button>
       <button id="playReadingExerciseBtn" type="button">Ouvir como sax</button>
       <button id="practiceReadingExerciseBtn" type="button">Praticar leitura</button>

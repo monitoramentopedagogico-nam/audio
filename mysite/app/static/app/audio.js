@@ -111,6 +111,10 @@ const readingFunctionTheory = document.getElementById('readingFunctionTheory');
 const readingScoreSvg = document.getElementById('readingScoreSvg');
 const readingNotes = document.getElementById('readingNotes');
 const readingSummary = document.getElementById('readingSummary');
+const readingPageNav = document.getElementById('readingPageNav');
+const readingPrevPageBtn = document.getElementById('readingPrevPageBtn');
+const readingNextPageBtn = document.getElementById('readingNextPageBtn');
+const readingPageStatus = document.getElementById('readingPageStatus');
 const generateReadingExerciseBtn = document.getElementById('generateReadingExerciseBtn');
 const playReadingExerciseBtn = document.getElementById('playReadingExerciseBtn');
 const practiceReadingExerciseBtn = document.getElementById('practiceReadingExerciseBtn');
@@ -278,12 +282,14 @@ let calibratedNoteRms = 0.003;
 let currentArrangement = null;
 let currentLyricMelody = null;
 let currentReadingExercise = null;
+let readingScorePage = 0;
 
 let MIN_NOTE_RMS = 0.003;
 let SILENCE_RMS = 0.0015;
 const MIN_PITCH_HZ = 45;
 const MAX_PITCH_HZ = 1200;
 const REFERENCE_TONE_GAIN = 0.45;
+const READING_SCORE_PAGE_SIZE = 24;
 const referenceReverbBuses = new WeakMap();
 
 const beginnerRoutine = [
@@ -1300,6 +1306,8 @@ if(readingLevel) readingLevel.addEventListener('change', generateReadingExercise
 if(readingKey) readingKey.addEventListener('change', generateReadingExercise);
 if(readingMeter) readingMeter.addEventListener('change', generateReadingExercise);
 if(readingBpm) readingBpm.addEventListener('change', syncReadingBpm);
+if(readingPrevPageBtn) readingPrevPageBtn.addEventListener('click', ()=>setReadingScorePage(readingScorePage - 1));
+if(readingNextPageBtn) readingNextPageBtn.addEventListener('click', ()=>setReadingScorePage(readingScorePage + 1));
 if(savedScoresList) loadSavedScores();
 if(routinePrevBtn) routinePrevBtn.addEventListener('click', ()=>setRoutineStep(beginnerRoutineIndex - 1));
 if(routineNextBtn) routineNextBtn.addEventListener('click', ()=>setRoutineStep(beginnerRoutineIndex + 1));
@@ -2611,8 +2619,46 @@ function appendReadingBarLine(svg, x, staffTop, lineGap, measureNumber, finalBar
   }
 }
 
+function readingScorePageCount(exercise = currentReadingExercise){
+  return exercise && exercise.notes ? Math.max(1, Math.ceil(exercise.notes.length / READING_SCORE_PAGE_SIZE)) : 1;
+}
+
+function updateReadingPageNavigation(exercise = currentReadingExercise){
+  const pageCount = readingScorePageCount(exercise);
+  readingScorePage = Math.max(0, Math.min(pageCount - 1, readingScorePage));
+  if(readingPageNav) readingPageNav.hidden = pageCount <= 1;
+  if(readingPageStatus) readingPageStatus.textContent = `Pagina ${readingScorePage + 1} de ${pageCount}`;
+  if(readingPrevPageBtn) readingPrevPageBtn.disabled = readingScorePage === 0;
+  if(readingNextPageBtn) readingNextPageBtn.disabled = readingScorePage >= pageCount - 1;
+}
+
+function setReadingScorePage(page){
+  if(!currentReadingExercise) return;
+  const pageCount = readingScorePageCount(currentReadingExercise);
+  readingScorePage = Math.max(0, Math.min(pageCount - 1, page));
+  renderReadingScore(currentReadingExercise);
+  renderReadingNotes(currentReadingExercise);
+  if(readingScoreSvg) readingScoreSvg.scrollLeft = 0;
+}
+
 function renderReadingScore(exercise){
   if(!readingScoreSvg || !exercise) return;
+  const sourceExercise = exercise;
+  const pageStart = readingScorePage * READING_SCORE_PAGE_SIZE;
+  const pageEnd = Math.min(sourceExercise.notes.length, pageStart + READING_SCORE_PAGE_SIZE);
+  const sourceMeasureStarts = sourceExercise.measureStarts || [];
+  exercise = {
+    ...sourceExercise,
+    notes: sourceExercise.notes.slice(pageStart, pageEnd),
+    beats: sourceExercise.beats.slice(pageStart, pageEnd),
+    degrees: sourceExercise.degrees.slice(pageStart, pageEnd),
+    functions: sourceExercise.functions.slice(pageStart, pageEnd),
+    measureStarts: sourceMeasureStarts
+      .filter(index=>index > pageStart && index < pageEnd)
+      .map(index=>index - pageStart),
+    initialMeasureNumber: 1 + sourceMeasureStarts.filter(index=>index <= pageStart).length,
+  };
+  updateReadingPageNavigation(sourceExercise);
   const normalizedBeats = exercise.notes.map((_, index)=>Math.max(0.125, Number(exercise.beats[index]) || 1));
   const rawSlots = normalizedBeats.map(beat=>Math.max(42, Math.min(150, beat * 54)));
   const rawSlotsWidth = rawSlots.reduce((sum, slot)=>sum + slot, 0);
@@ -2674,7 +2720,7 @@ function renderReadingScore(exercise){
   const explicitMeasureStarts = new Set(exercise.measureStarts || []);
   const measureCapacity = readingMeasureCapacity(exercise.meter);
   let elapsedMeasureBeats = 0;
-  let measureNumber = 1;
+  let measureNumber = exercise.initialMeasureNumber || 1;
   appendReadingBarLine(svg, 112, staffTop, lineGap, measureNumber);
   exercise.notes.forEach((note, index)=>{
     const startsExplicitMeasure = index > 0 && explicitMeasureStarts.has(index);
@@ -2702,6 +2748,7 @@ function renderReadingScore(exercise){
     const head = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
     head.classList.add('reading-note-head');
     head.dataset.readingNoteIndex = String(index);
+    head.dataset.scoreNoteIndex = String(pageStart + index);
     head.setAttribute('cx', `${x}`);
     head.setAttribute('cy', `${y}`);
     head.setAttribute('rx', '8');
@@ -2753,16 +2800,21 @@ function renderReadingScore(exercise){
 function renderReadingNotes(exercise){
   if(!readingNotes || !exercise) return;
   readingNotes.innerHTML = '';
-  exercise.notes.forEach((note, index)=>{
+  const pageStart = readingScorePage * READING_SCORE_PAGE_SIZE;
+  const pageEnd = Math.min(exercise.notes.length, pageStart + READING_SCORE_PAGE_SIZE);
+  exercise.notes.slice(pageStart, pageEnd).forEach((note, localIndex)=>{
+    const index = pageStart + localIndex;
     const chip = document.createElement('span');
     chip.textContent = `${exercise.degrees[index]}: ${noteToSolfege(note)} (${note})`;
     chip.title = exercise.functions[index] || '';
+    chip.dataset.scoreNoteIndex = String(index);
     readingNotes.appendChild(chip);
   });
 }
 
 function generateReadingExercise(){
   currentReadingExercise = buildReadingExercise();
+  readingScorePage = 0;
   if(readingPitchTheory) readingPitchTheory.textContent = currentReadingExercise.pitchTheory;
   if(readingRhythmTheory) readingRhythmTheory.textContent = currentReadingExercise.rhythmTheory;
   if(readingFunctionTheory) readingFunctionTheory.textContent = currentReadingExercise.functionTheory;
@@ -2826,6 +2878,7 @@ async function importScoreFile(selectedFile){
       rhythmTheory: 'As duracoes foram importadas da partitura.',
       functionTheory: 'A primeira linha melodica reconhecida foi selecionada para o sax.',
     };
+    readingScorePage = 0;
     if(readingBpm) readingBpm.value = currentReadingExercise.bpm;
     if(readingSummary) readingSummary.textContent = `${currentReadingExercise.title}: ${data.notes.length} notas reconhecidas, ${currentReadingExercise.meter}, ${currentReadingExercise.bpm} BPM.`;
     if(readingPitchTheory) readingPitchTheory.textContent = currentReadingExercise.pitchTheory;
@@ -2862,6 +2915,7 @@ function readingExerciseForStorage(exercise){
 
 function loadReadingExercise(scoreData, title){
   currentReadingExercise = readingExerciseForStorage({...scoreData, title: title || scoreData.title});
+  readingScorePage = 0;
   if(readingBpm) readingBpm.value = clampBpm(currentReadingExercise.bpm || 60);
   if(readingMeter && Array.from(readingMeter.options).some(option=>option.value === currentReadingExercise.meter)){
     readingMeter.value = currentReadingExercise.meter;
@@ -2960,25 +3014,34 @@ async function playReadingExercise(){
   if(!currentReadingExercise) generateReadingExercise();
   if(!currentReadingExercise) return;
   currentReadingExercise.bpm = syncReadingBpm();
-  const chips = readingNotes ? Array.from(readingNotes.querySelectorAll('span')) : [];
-  const scoreNotes = readingScoreSvg ? Array.from(readingScoreSvg.querySelectorAll('.reading-note-head')) : [];
   const longScore = currentReadingExercise.notes.length > 80;
   let previousIndex = -1;
   await playReferenceSequence(currentReadingExercise.notes, currentReadingExercise.bpm, (index)=>{
     if(previousIndex >= 0){
-      if(chips[previousIndex]) chips[previousIndex].classList.remove('reference-playing');
-      if(scoreNotes[previousIndex]) scoreNotes[previousIndex].classList.remove('reference-playing');
+      const previousChip = readingNotes ? readingNotes.querySelector(`[data-score-note-index="${previousIndex}"]`) : null;
+      const previousNote = readingScoreSvg ? readingScoreSvg.querySelector(`[data-score-note-index="${previousIndex}"]`) : null;
+      if(previousChip) previousChip.classList.remove('reference-playing');
+      if(previousNote) previousNote.classList.remove('reference-playing');
     }
     if(index >= 0){
-      if(chips[index]) chips[index].classList.add('reference-playing');
-      if(scoreNotes[index]) scoreNotes[index].classList.add('reference-playing');
-    }
-    if(index >= 0 && scoreNotes[index] && readingScoreSvg){
-      const noteX = Number(scoreNotes[index].getAttribute('cx')) || 0;
-      const viewportWidth = readingScoreSvg.clientWidth;
-      const maxScroll = Math.max(0, readingScoreSvg.scrollWidth - viewportWidth);
-      const targetScroll = Math.max(0, Math.min(maxScroll, noteX - viewportWidth * 0.42));
-      readingScoreSvg.scrollTo({left: targetScroll, behavior: longScore ? 'auto' : 'smooth'});
+      const targetPage = Math.floor(index / READING_SCORE_PAGE_SIZE);
+      if(targetPage !== readingScorePage){
+        readingScorePage = targetPage;
+        renderReadingScore(currentReadingExercise);
+        renderReadingNotes(currentReadingExercise);
+        if(readingScoreSvg) readingScoreSvg.scrollLeft = 0;
+      }
+      const activeChip = readingNotes ? readingNotes.querySelector(`[data-score-note-index="${index}"]`) : null;
+      const activeNote = readingScoreSvg ? readingScoreSvg.querySelector(`[data-score-note-index="${index}"]`) : null;
+      if(activeChip) activeChip.classList.add('reference-playing');
+      if(activeNote) activeNote.classList.add('reference-playing');
+      if(activeNote && readingScoreSvg){
+        const noteX = Number(activeNote.getAttribute('cx')) || 0;
+        const viewportWidth = readingScoreSvg.clientWidth;
+        const maxScroll = Math.max(0, readingScoreSvg.scrollWidth - viewportWidth);
+        const targetScroll = Math.max(0, Math.min(maxScroll, noteX - viewportWidth * 0.42));
+        readingScoreSvg.scrollTo({left: targetScroll, behavior: longScore ? 'auto' : 'smooth'});
+      }
     }
     previousIndex = index;
   }, currentReadingExercise.beats);
