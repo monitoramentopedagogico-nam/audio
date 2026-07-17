@@ -889,10 +889,12 @@
     <p>Escolha um foco de teoria musical, ou&ccedil;a a refer&ecirc;ncia e pratique lendo a pauta nota por nota.</p>
     <div class="score-import-panel">
       <label>Importar partitura
-        <input id="scoreFileInput" type="file" accept="application/pdf,.pdf,.musicxml,.xml,.mxl">
+        <input id="scoreFileInput" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png,.musicxml,.xml,.mxl">
       </label>
       <button id="importScoreBtn" type="button">Ler PDF e preparar execu&ccedil;&atilde;o</button>
-      <p id="scoreImportStatus" role="status">Use PDF impresso, MusicXML ou MXL. Para maior precis&atilde;o, prefira uma linha mel&oacute;dica em clave de sol.</p>
+      <button id="captureScoreBtn" type="button">Fotografar partitura</button>
+      <input id="scoreCameraInput" type="file" accept="image/*" capture="environment" hidden>
+      <p id="scoreImportStatus" role="status">Use a c&acirc;mera, PDF impresso, MusicXML ou MXL. Fotografe a folha inteira, reta e com boa ilumina&ccedil;&atilde;o.</p>
     </div>
     <div class="saved-score-panel">
       <strong>Minhas partituras</strong>

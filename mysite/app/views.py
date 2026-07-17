@@ -123,11 +123,11 @@ def _parse_musicxml_score(xml_bytes):
     }
 
 
-def _convert_pdf_with_audiveris(pdf_path, output_dir):
+def _convert_score_with_audiveris(score_path, output_dir):
     command = shlex.split(os.getenv('AUDIVERIS_COMMAND', 'audiveris'))
     try:
         result = subprocess.run(
-            [*command, '-batch', '-export', '-output', str(output_dir), '--', str(pdf_path)],
+            [*command, '-batch', '-export', '-output', str(output_dir), '--', str(score_path)],
             check=False,
             capture_output=True,
             text=True,
@@ -137,7 +137,7 @@ def _convert_pdf_with_audiveris(pdf_path, output_dir):
     except FileNotFoundError as exc:
         raise RuntimeError('The OMR engine is not installed on the server.') from exc
     except subprocess.TimeoutExpired as exc:
-        raise RuntimeError('PDF recognition exceeded the three-minute limit.') from exc
+        raise RuntimeError('Score recognition exceeded the three-minute limit.') from exc
     candidates = list(output_dir.rglob('*.mxl')) + list(output_dir.rglob('*.musicxml')) + list(output_dir.rglob('*.xml'))
     if result.returncode != 0 or not candidates:
         combined_output = '\n'.join(part for part in (result.stdout, result.stderr) if part)
@@ -287,11 +287,11 @@ def fetch_chord_sheet(request):
 def import_score(request):
     score = request.FILES.get('score')
     if not score:
-        return HttpResponseBadRequest('Choose a PDF, MusicXML, XML, or MXL file.')
+        return HttpResponseBadRequest('Choose a PDF, photo, MusicXML, XML, or MXL file.')
     if score.size > MAX_SCORE_BYTES:
         return HttpResponseBadRequest('The score exceeds the 15 MB limit.')
     extension = Path(score.name).suffix.lower()
-    if extension not in {'.pdf', '.musicxml', '.xml', '.mxl'}:
+    if extension not in {'.pdf', '.jpg', '.jpeg', '.png', '.musicxml', '.xml', '.mxl'}:
         return HttpResponseBadRequest('Unsupported score format.')
 
     try:
@@ -301,7 +301,8 @@ def import_score(request):
             with input_path.open('wb') as destination:
                 for chunk in score.chunks():
                     destination.write(chunk)
-            musicxml_path = _convert_pdf_with_audiveris(input_path, temp_dir) if extension == '.pdf' else input_path
+            needs_omr = extension in {'.pdf', '.jpg', '.jpeg', '.png'}
+            musicxml_path = _convert_score_with_audiveris(input_path, temp_dir) if needs_omr else input_path
             parsed = _parse_musicxml_score(_musicxml_bytes(musicxml_path))
     except (ValueError, ElementTree.ParseError, zipfile.BadZipFile) as exc:
         return JsonResponse({'status': 'error', 'message': str(exc)}, status=422)

@@ -116,6 +116,8 @@ const playReadingExerciseBtn = document.getElementById('playReadingExerciseBtn')
 const practiceReadingExerciseBtn = document.getElementById('practiceReadingExerciseBtn');
 const scoreFileInput = document.getElementById('scoreFileInput');
 const importScoreBtn = document.getElementById('importScoreBtn');
+const captureScoreBtn = document.getElementById('captureScoreBtn');
+const scoreCameraInput = document.getElementById('scoreCameraInput');
 const scoreImportStatus = document.getElementById('scoreImportStatus');
 const savedScoreTitle = document.getElementById('savedScoreTitle');
 const saveScoreLibraryBtn = document.getElementById('saveScoreLibraryBtn');
@@ -1288,6 +1290,11 @@ if(generateReadingExerciseBtn) generateReadingExerciseBtn.addEventListener('clic
 if(playReadingExerciseBtn) playReadingExerciseBtn.addEventListener('click', playReadingExercise);
 if(practiceReadingExerciseBtn) practiceReadingExerciseBtn.addEventListener('click', practiceReadingExercise);
 if(importScoreBtn) importScoreBtn.addEventListener('click', importScoreFile);
+if(captureScoreBtn && scoreCameraInput) captureScoreBtn.addEventListener('click', ()=>scoreCameraInput.click());
+if(scoreCameraInput) scoreCameraInput.addEventListener('change', ()=>{
+  const photo = scoreCameraInput.files ? scoreCameraInput.files[0] : null;
+  if(photo) importScoreFile(photo);
+});
 if(saveScoreLibraryBtn) saveScoreLibraryBtn.addEventListener('click', saveCurrentReadingScore);
 if(readingLevel) readingLevel.addEventListener('change', generateReadingExercise);
 if(readingKey) readingKey.addEventListener('change', generateReadingExercise);
@@ -2778,14 +2785,20 @@ function syncReadingBpm(){
   return bpm;
 }
 
-async function importScoreFile(){
-  const file = scoreFileInput && scoreFileInput.files ? scoreFileInput.files[0] : null;
+async function importScoreFile(selectedFile){
+  const file = selectedFile instanceof File
+    ? selectedFile
+    : (scoreFileInput && scoreFileInput.files ? scoreFileInput.files[0] : null);
   if(!file){
-    if(scoreImportStatus) scoreImportStatus.textContent = 'Escolha um arquivo PDF, MusicXML ou MXL.';
+    if(scoreImportStatus) scoreImportStatus.textContent = 'Escolha um arquivo ou fotografe a partitura.';
     return;
   }
   if(importScoreBtn) importScoreBtn.disabled = true;
-  if(scoreImportStatus) scoreImportStatus.textContent = file.name.toLowerCase().endsWith('.pdf')
+  if(captureScoreBtn) captureScoreBtn.disabled = true;
+  const imageFile = (file.type || '').startsWith('image/');
+  if(scoreImportStatus) scoreImportStatus.textContent = imageFile
+    ? 'Analisando a foto da partitura. Isso pode levar alguns minutos...'
+    : file.name.toLowerCase().endsWith('.pdf')
     ? 'Reconhecendo a partitura. PDFs podem levar alguns minutos...'
     : 'Lendo a partitura...';
   try {
@@ -2808,7 +2821,7 @@ async function importScoreFile(){
       beats: data.beats,
       measureStarts: data.measure_starts || [],
       degrees,
-      functions: data.notes.map(()=> 'nota reconhecida do PDF'),
+      functions: data.notes.map(()=> 'nota reconhecida da partitura'),
       pitchTheory: 'Confira as notas reconhecidas antes de tocar.',
       rhythmTheory: 'As duracoes foram importadas da partitura.',
       functionTheory: 'A primeira linha melodica reconhecida foi selecionada para o sax.',
@@ -2825,6 +2838,8 @@ async function importScoreFile(){
     if(scoreImportStatus) scoreImportStatus.textContent = error.message || 'Falha ao reconhecer a partitura.';
   } finally {
     if(importScoreBtn) importScoreBtn.disabled = false;
+    if(captureScoreBtn) captureScoreBtn.disabled = false;
+    if(scoreCameraInput) scoreCameraInput.value = '';
   }
 }
 
