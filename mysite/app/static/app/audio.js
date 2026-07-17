@@ -117,6 +117,10 @@ const practiceReadingExerciseBtn = document.getElementById('practiceReadingExerc
 const scoreFileInput = document.getElementById('scoreFileInput');
 const importScoreBtn = document.getElementById('importScoreBtn');
 const scoreImportStatus = document.getElementById('scoreImportStatus');
+const savedScoreTitle = document.getElementById('savedScoreTitle');
+const saveScoreLibraryBtn = document.getElementById('saveScoreLibraryBtn');
+const savedScoreStatus = document.getElementById('savedScoreStatus');
+const savedScoresList = document.getElementById('savedScoresList');
 const exercises = document.getElementById('exercises');
 const labelCollection = document.getElementById('labelCollection');
 const downloads = document.getElementById('downloads');
@@ -278,6 +282,7 @@ let SILENCE_RMS = 0.0015;
 const MIN_PITCH_HZ = 45;
 const MAX_PITCH_HZ = 1200;
 const REFERENCE_TONE_GAIN = 0.45;
+const referenceReverbBuses = new WeakMap();
 
 const beginnerRoutine = [
   {
@@ -959,6 +964,30 @@ async function ensureAudioContext(){
   return audioCtx;
 }
 
+function getReferenceReverbBus(ctx){
+  const existing = referenceReverbBuses.get(ctx);
+  if(existing) return existing;
+
+  const convolver = ctx.createConvolver();
+  const wetGain = ctx.createGain();
+  const seconds = 1.25;
+  const impulse = ctx.createBuffer(2, Math.ceil(ctx.sampleRate * seconds), ctx.sampleRate);
+  for(let channel = 0; channel < impulse.numberOfChannels; channel += 1){
+    const samples = impulse.getChannelData(channel);
+    for(let index = 0; index < samples.length; index += 1){
+      const decay = Math.pow(1 - index / samples.length, 2.8);
+      samples[index] = (Math.random() * 2 - 1) * decay;
+    }
+  }
+  convolver.buffer = impulse;
+  wetGain.gain.value = 0.16;
+  convolver.connect(wetGain);
+  wetGain.connect(ctx.destination);
+  const bus = {input: convolver};
+  referenceReverbBuses.set(ctx, bus);
+  return bus;
+}
+
 function playReferenceTone(frequency, startTime, duration){
   const output = audioCtx.createGain();
   const filter = audioCtx.createBiquadFilter();
@@ -1000,6 +1029,7 @@ function playReferenceTone(frequency, startTime, duration){
 
   filter.connect(output);
   output.connect(audioCtx.destination);
+  output.connect(getReferenceReverbBus(audioCtx).input);
   vibrato.start(startTime + 0.12);
   vibrato.stop(startTime + duration + 0.03);
 }
@@ -1233,9 +1263,12 @@ if(generateReadingExerciseBtn) generateReadingExerciseBtn.addEventListener('clic
 if(playReadingExerciseBtn) playReadingExerciseBtn.addEventListener('click', playReadingExercise);
 if(practiceReadingExerciseBtn) practiceReadingExerciseBtn.addEventListener('click', practiceReadingExercise);
 if(importScoreBtn) importScoreBtn.addEventListener('click', importScoreFile);
+if(saveScoreLibraryBtn) saveScoreLibraryBtn.addEventListener('click', saveCurrentReadingScore);
 if(readingLevel) readingLevel.addEventListener('change', generateReadingExercise);
 if(readingKey) readingKey.addEventListener('change', generateReadingExercise);
 if(readingMeter) readingMeter.addEventListener('change', generateReadingExercise);
+if(readingBpm) readingBpm.addEventListener('change', syncReadingBpm);
+if(savedScoresList) loadSavedScores();
 if(routinePrevBtn) routinePrevBtn.addEventListener('click', ()=>setRoutineStep(beginnerRoutineIndex - 1));
 if(routineNextBtn) routineNextBtn.addEventListener('click', ()=>setRoutineStep(beginnerRoutineIndex + 1));
 if(advancedToggle && advancedTools) advancedToggle.addEventListener('click', ()=>{
@@ -2513,6 +2546,39 @@ function appendReadingLedgerLines(svg, x, y){
   });
 }
 
+function readingMeasureCapacity(meter){
+  const match = String(meter || '4/4').match(/^(\d+)\/(\d+)$/);
+  if(!match) return 4;
+  const numerator = Number(match[1]);
+  const denominator = Number(match[2]);
+  return numerator > 0 && denominator > 0 ? numerator * (4 / denominator) : 4;
+}
+
+function appendReadingBarLine(svg, x, staffTop, lineGap, measureNumber, finalBar = false){
+  const addLine = (lineX, width)=>{
+    const bar = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    bar.classList.add('reading-bar-line');
+    bar.setAttribute('x1', `${lineX}`);
+    bar.setAttribute('x2', `${lineX}`);
+    bar.setAttribute('y1', `${staffTop}`);
+    bar.setAttribute('y2', `${staffTop + lineGap * 4}`);
+    bar.setAttribute('stroke', '#121c24');
+    bar.setAttribute('stroke-width', `${width}`);
+    svg.appendChild(bar);
+  };
+  if(finalBar) addLine(x - 5, 1.2);
+  addLine(x, finalBar ? 3 : 1.4);
+  if(measureNumber){
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('x', `${x + 5}`);
+    label.setAttribute('y', `${staffTop - 9}`);
+    label.setAttribute('font-size', '10');
+    label.setAttribute('fill', '#66727a');
+    label.textContent = String(measureNumber);
+    svg.appendChild(label);
+  }
+}
+
 function renderReadingScore(exercise){
   if(!readingScoreSvg || !exercise) return;
   const width = Math.min(12000, Math.max(680, exercise.notes.length * 54 + 160));
@@ -2568,7 +2634,18 @@ function renderReadingScore(exercise){
   const totalBeats = exercise.beats.reduce((sum, beat)=>sum + beat, 0);
   let cursor = 122;
   const usableWidth = width - 160;
+  const explicitMeasureStarts = new Set(exercise.measureStarts || []);
+  const measureCapacity = readingMeasureCapacity(exercise.meter);
+  let elapsedMeasureBeats = 0;
+  let measureNumber = 1;
+  appendReadingBarLine(svg, 112, staffTop, lineGap, measureNumber);
   exercise.notes.forEach((note, index)=>{
+    const startsExplicitMeasure = index > 0 && explicitMeasureStarts.has(index);
+    const startsCalculatedMeasure = index > 0 && !explicitMeasureStarts.size && elapsedMeasureBeats >= measureCapacity - 0.001;
+    if(startsExplicitMeasure || startsCalculatedMeasure){
+      appendReadingBarLine(svg, cursor, staffTop, lineGap, ++measureNumber);
+      elapsedMeasureBeats = 0;
+    }
     const beat = exercise.beats[index] || 1;
     const slot = Math.max(42, (beat / totalBeats) * usableWidth);
     const x = cursor + slot / 2;
@@ -2628,7 +2705,9 @@ function renderReadingScore(exercise){
     svg.appendChild(label);
 
     cursor += slot;
+    elapsedMeasureBeats += beat;
   });
+  appendReadingBarLine(svg, Math.min(width - 24, cursor + 3), staffTop, lineGap, null, true);
 
   readingScoreSvg.innerHTML = '';
   readingScoreSvg.appendChild(svg);
@@ -2655,6 +2734,18 @@ function generateReadingExercise(){
   }
   renderReadingScore(currentReadingExercise);
   renderReadingNotes(currentReadingExercise);
+}
+
+function syncReadingBpm(){
+  const bpm = clampBpm(readingBpm ? readingBpm.value || 60 : 60);
+  if(readingBpm) readingBpm.value = bpm;
+  if(currentReadingExercise){
+    currentReadingExercise.bpm = bpm;
+    if(readingSummary){
+      readingSummary.textContent = `${currentReadingExercise.title}, ${currentReadingExercise.meter}, ${bpm} BPM. Leia, ouca e depois execute.`;
+    }
+  }
+  return bpm;
 }
 
 async function importScoreFile(){
@@ -2685,6 +2776,7 @@ async function importScoreFile(){
       bpm: clampBpm(data.bpm || 60),
       notes: data.notes,
       beats: data.beats,
+      measureStarts: data.measure_starts || [],
       degrees,
       functions: data.notes.map(()=> 'nota reconhecida do PDF'),
       pitchTheory: 'Confira as notas reconhecidas antes de tocar.',
@@ -2706,9 +2798,123 @@ async function importScoreFile(){
   }
 }
 
+function readingExerciseForStorage(exercise){
+  return {
+    title: exercise.title,
+    key: exercise.key,
+    meter: exercise.meter,
+    bpm: exercise.bpm,
+    notes: exercise.notes,
+    beats: exercise.beats,
+    measureStarts: exercise.measureStarts || [],
+    degrees: exercise.degrees || exercise.notes.map((_, index)=>String(index + 1)),
+    functions: exercise.functions || exercise.notes.map(()=>''),
+    pitchTheory: exercise.pitchTheory || 'Partitura salva para estudo.',
+    rhythmTheory: exercise.rhythmTheory || 'Respeite as duracoes e os compassos.',
+    functionTheory: exercise.functionTheory || 'Observe o movimento da frase.',
+  };
+}
+
+function loadReadingExercise(scoreData, title){
+  currentReadingExercise = readingExerciseForStorage({...scoreData, title: title || scoreData.title});
+  if(readingBpm) readingBpm.value = clampBpm(currentReadingExercise.bpm || 60);
+  if(readingMeter && Array.from(readingMeter.options).some(option=>option.value === currentReadingExercise.meter)){
+    readingMeter.value = currentReadingExercise.meter;
+  }
+  if(savedScoreTitle) savedScoreTitle.value = currentReadingExercise.title || '';
+  if(readingPitchTheory) readingPitchTheory.textContent = currentReadingExercise.pitchTheory;
+  if(readingRhythmTheory) readingRhythmTheory.textContent = currentReadingExercise.rhythmTheory;
+  if(readingFunctionTheory) readingFunctionTheory.textContent = currentReadingExercise.functionTheory;
+  renderReadingScore(currentReadingExercise);
+  renderReadingNotes(currentReadingExercise);
+  syncReadingBpm();
+}
+
+async function saveCurrentReadingScore(){
+  if(!currentReadingExercise || !currentReadingExercise.notes.length){
+    if(savedScoreStatus) savedScoreStatus.textContent = 'Gere ou importe uma partitura antes de salvar.';
+    return;
+  }
+  const title = (savedScoreTitle ? savedScoreTitle.value : '').trim() || currentReadingExercise.title || 'Partitura sem nome';
+  currentReadingExercise.bpm = syncReadingBpm();
+  if(saveScoreLibraryBtn) saveScoreLibraryBtn.disabled = true;
+  if(savedScoreStatus) savedScoreStatus.textContent = 'Salvando...';
+  try {
+    const response = await fetch('/api/saved_scores/', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', 'X-CSRFToken': getCSRF() || ''},
+      body: JSON.stringify({title, score_data: readingExerciseForStorage(currentReadingExercise)}),
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.message || 'Nao foi possivel salvar.');
+    if(savedScoreTitle) savedScoreTitle.value = title;
+    if(savedScoreStatus) savedScoreStatus.textContent = `Partitura "${title}" salva.`;
+    await loadSavedScores();
+  } catch(error) {
+    if(savedScoreStatus) savedScoreStatus.textContent = error.message || 'Falha ao salvar a partitura.';
+  } finally {
+    if(saveScoreLibraryBtn) saveScoreLibraryBtn.disabled = false;
+  }
+}
+
+async function deleteSavedScore(id, title){
+  if(!window.confirm(`Excluir a partitura "${title}"?`)) return;
+  const response = await fetch('/api/saved_scores/', {
+    method: 'DELETE',
+    headers: {'Content-Type':'application/json', 'X-CSRFToken': getCSRF() || ''},
+    body: JSON.stringify({id}),
+  });
+  const data = await response.json();
+  if(!response.ok){
+    if(savedScoreStatus) savedScoreStatus.textContent = data.message || 'Nao foi possivel excluir.';
+    return;
+  }
+  if(savedScoreStatus) savedScoreStatus.textContent = 'Partitura excluida.';
+  await loadSavedScores();
+}
+
+async function loadSavedScores(){
+  if(!savedScoresList) return;
+  try {
+    const response = await fetch('/api/saved_scores/');
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.message || 'Nao foi possivel consultar as partituras.');
+    savedScoresList.innerHTML = '';
+    if(!data.scores.length){
+      const empty = document.createElement('span');
+      empty.textContent = 'Nenhuma partitura salva.';
+      savedScoresList.appendChild(empty);
+      return;
+    }
+    data.scores.forEach((score)=>{
+      const item = document.createElement('div');
+      item.className = 'saved-score-item';
+      const label = document.createElement('span');
+      const noteCount = Array.isArray(score.score_data.notes) ? score.score_data.notes.length : 0;
+      label.textContent = `${score.title} - ${noteCount} notas, ${score.score_data.meter || '4/4'}, ${score.score_data.bpm || 60} BPM`;
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.textContent = 'Abrir';
+      open.addEventListener('click', ()=>{
+        loadReadingExercise(score.score_data, score.title);
+        if(savedScoreStatus) savedScoreStatus.textContent = `Partitura "${score.title}" carregada.`;
+      });
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = 'Excluir';
+      remove.addEventListener('click', ()=>deleteSavedScore(score.id, score.title));
+      item.append(label, open, remove);
+      savedScoresList.appendChild(item);
+    });
+  } catch(error) {
+    if(savedScoreStatus) savedScoreStatus.textContent = error.message || 'Falha ao consultar partituras.';
+  }
+}
+
 async function playReadingExercise(){
   if(!currentReadingExercise) generateReadingExercise();
   if(!currentReadingExercise) return;
+  currentReadingExercise.bpm = syncReadingBpm();
   await playReferenceSequence(currentReadingExercise.notes, currentReadingExercise.bpm, (index)=>{
     const chips = readingNotes ? Array.from(readingNotes.querySelectorAll('span')) : [];
     chips.forEach((chip, chipIndex)=>chip.classList.toggle('reference-playing', chipIndex === index));
@@ -2716,12 +2922,20 @@ async function playReadingExercise(){
     scoreNotes.forEach((noteHead, noteIndex)=>{
       noteHead.classList.toggle('reference-playing', noteIndex === index);
     });
+    if(index >= 0 && scoreNotes[index] && readingScoreSvg){
+      const noteX = Number(scoreNotes[index].getAttribute('cx')) || 0;
+      const viewportWidth = readingScoreSvg.clientWidth;
+      const maxScroll = Math.max(0, readingScoreSvg.scrollWidth - viewportWidth);
+      const targetScroll = Math.max(0, Math.min(maxScroll, noteX - viewportWidth * 0.42));
+      readingScoreSvg.scrollTo({left: targetScroll, behavior: 'smooth'});
+    }
   }, currentReadingExercise.beats);
 }
 
 function practiceReadingExercise(){
   if(!currentReadingExercise) generateReadingExercise();
   if(!currentReadingExercise || !currentReadingExercise.notes.length) return;
+  currentReadingExercise.bpm = syncReadingBpm();
   beginnerStandaloneExercises.sheet_reading = {
     title: `Leitura - ${currentReadingExercise.title}`,
     mode: 'scale',

@@ -74,3 +74,17 @@ class PracticeSession(models.Model):
                 name='unique_session_client_id_per_user',
             ),
         ]
+
+
+class SavedScore(models.Model):
+    user = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='saved_scores')
+    title = models.CharField(max_length=160)
+    score_data = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.title} ({self.user})'
+
+    class Meta:
+        ordering = ['-updated_at']

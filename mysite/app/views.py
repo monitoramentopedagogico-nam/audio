@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.http import JsonResponse, HttpResponseBadRequest
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
@@ -71,9 +71,11 @@ def _parse_musicxml_score(xml_bytes):
     meter = '4/4'
     notes = []
     beats = []
+    measure_starts = []
     selected_voice = None
 
     for measure in part.findall('./measure'):
+        notes_before_measure = len(notes)
         divisions_text = measure.findtext('./attributes/divisions')
         if divisions_text:
             divisions = max(1, int(float(divisions_text)))
@@ -104,12 +106,21 @@ def _parse_musicxml_score(xml_bytes):
             beats.append(duration)
             if len(notes) >= 256:
                 break
+        if len(notes) > notes_before_measure and notes_before_measure > 0:
+            measure_starts.append(notes_before_measure)
         if len(notes) >= 256:
             break
 
     if not notes:
         raise ValueError('No playable melody was recognized in the first part.')
-    return {'title': title, 'notes': notes, 'beats': beats, 'bpm': bpm, 'meter': meter}
+    return {
+        'title': title,
+        'notes': notes,
+        'beats': beats,
+        'bpm': bpm,
+        'meter': meter,
+        'measure_starts': measure_starts,
+    }
 
 
 def _convert_pdf_with_audiveris(pdf_path, output_dir):
@@ -129,7 +140,12 @@ def _convert_pdf_with_audiveris(pdf_path, output_dir):
         raise RuntimeError('PDF recognition exceeded the three-minute limit.') from exc
     candidates = list(output_dir.rglob('*.mxl')) + list(output_dir.rglob('*.musicxml')) + list(output_dir.rglob('*.xml'))
     if result.returncode != 0 or not candidates:
-        detail = (result.stderr or result.stdout or '').strip()[-600:]
+        combined_output = '\n'.join(part for part in (result.stdout, result.stderr) if part)
+        useful_lines = [
+            line for line in combined_output.splitlines()
+            if line.strip() and not line.startswith('Picked up JAVA_TOOL_OPTIONS')
+        ]
+        detail = '\n'.join(useful_lines[-20:])[-2000:]
         raise RuntimeError(f'OMR could not recognize this score. {detail}'.strip())
     return candidates[0]
 
@@ -293,6 +309,41 @@ def import_score(request):
         return JsonResponse({'status': 'error', 'message': str(exc)}, status=503)
 
     return JsonResponse({'status': 'ok', **parsed})
+
+
+@login_required
+@require_http_methods(['GET', 'POST', 'DELETE'])
+def saved_scores(request):
+    from .models import SavedScore
+
+    if request.method == 'GET':
+        items = SavedScore.objects.filter(user=request.user).values(
+            'id', 'title', 'score_data', 'created_at', 'updated_at'
+        )[:100]
+        return JsonResponse({'status': 'ok', 'scores': list(items)})
+
+    try:
+        payload = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Dados invalidos.'}, status=400)
+
+    if request.method == 'DELETE':
+        score_id = payload.get('id')
+        deleted, _ = SavedScore.objects.filter(user=request.user, id=score_id).delete()
+        if not deleted:
+            return JsonResponse({'status': 'error', 'message': 'Partitura nao encontrada.'}, status=404)
+        return JsonResponse({'status': 'ok'})
+
+    title = str(payload.get('title') or '').strip()[:160]
+    score_data = payload.get('score_data')
+    notes = score_data.get('notes') if isinstance(score_data, dict) else None
+    beats = score_data.get('beats') if isinstance(score_data, dict) else None
+    if not title or not isinstance(notes, list) or not notes or len(notes) > 256:
+        return JsonResponse({'status': 'error', 'message': 'Partitura invalida.'}, status=400)
+    if not isinstance(beats, list) or len(beats) != len(notes):
+        return JsonResponse({'status': 'error', 'message': 'Duracoes da partitura invalidas.'}, status=400)
+    saved = SavedScore.objects.create(user=request.user, title=title, score_data=score_data)
+    return JsonResponse({'status': 'ok', 'id': saved.id, 'title': saved.title}, status=201)
 
 
 @login_required

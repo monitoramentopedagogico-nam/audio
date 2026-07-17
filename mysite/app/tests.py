@@ -6,7 +6,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import LabeledSample, Location, PracticeSession
+from .models import LabeledSample, Location, PracticeSession, SavedScore
 from .views import MAX_AUDIO_BYTES
 
 
@@ -122,3 +122,29 @@ class UploadSecurityTests(TestCase):
         self.assertEqual(response.json()['beats'], [1.0, 2.0])
         self.assertEqual(response.json()['bpm'], 72)
         self.assertEqual(response.json()['meter'], '4/4')
+        self.assertEqual(response.json()['measure_starts'], [])
+
+    def test_user_can_save_and_reopen_own_score(self):
+        self.client.force_login(self.user)
+        payload = {
+            'title': 'Escala de Sol',
+            'score_data': {
+                'notes': ['G4', 'A4'], 'beats': [1, 1], 'meter': '4/4', 'bpm': 72,
+                'measureStarts': [],
+            },
+        }
+        created = self.client.post(
+            reverse('saved_scores'), data=json.dumps(payload), content_type='application/json'
+        )
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(SavedScore.objects.get().user, self.user)
+        listed = self.client.get(reverse('saved_scores'))
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()['scores'][0]['title'], 'Escala de Sol')
+
+        other_user = get_user_model().objects.create_user(
+            username='other-student', password='test-pass-123'
+        )
+        self.client.force_login(other_user)
+        other_user_list = self.client.get(reverse('saved_scores'))
+        self.assertEqual(other_user_list.json()['scores'], [])

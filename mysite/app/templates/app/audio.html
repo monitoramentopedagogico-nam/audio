@@ -429,6 +429,13 @@
     .score-import-panel label{display:grid;gap:5px;flex:1 1 280px;font-weight:700}
     .score-import-panel input{padding:7px;width:100%}
     #scoreImportStatus{flex:1 1 100%;margin:0;color:var(--muted)}
+    .saved-score-panel{margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);display:grid;gap:8px}
+    .saved-score-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .saved-score-actions input{flex:1 1 240px;padding:8px}
+    #savedScoresList{display:grid;gap:6px}
+    .saved-score-item{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--line);border-radius:7px}
+    .saved-score-item span{flex:1;min-width:0;overflow-wrap:anywhere}
+    #savedScoreStatus{margin:0;color:var(--muted)}
     #advancedToggle{background:var(--header);color:#fff;border-color:var(--header)}
     .advanced-hidden{display:none!important}
     #advancedTools{
@@ -518,7 +525,7 @@
       min-height:140px;
     }
     #scoreContainer svg{width:100%;max-width:620px;height:auto;display:block}
-    #readingScoreSvg{max-width:100%;overflow-x:auto}
+    #readingScoreSvg{max-width:100%;overflow-x:auto;scroll-behavior:smooth;scrollbar-gutter:stable}
     #readingScoreSvg svg{width:100%;max-width:720px;height:auto;display:block}
     #readingScoreSvg .reading-note-head{
       transition:fill .1s ease,stroke .1s ease,filter .1s ease,transform .1s ease;
@@ -854,6 +861,15 @@
       <button id="importScoreBtn" type="button">Ler PDF e preparar execu&ccedil;&atilde;o</button>
       <p id="scoreImportStatus" role="status">Use PDF impresso, MusicXML ou MXL. Para maior precis&atilde;o, prefira uma linha mel&oacute;dica em clave de sol.</p>
     </div>
+    <div class="saved-score-panel">
+      <strong>Minhas partituras</strong>
+      <div class="saved-score-actions">
+        <input id="savedScoreTitle" type="text" maxlength="160" placeholder="Nome da partitura">
+        <button id="saveScoreLibraryBtn" type="button">Salvar partitura</button>
+      </div>
+      <p id="savedScoreStatus" role="status">Salve a partitura atual para consultar depois.</p>
+      <div id="savedScoresList"></div>
+    </div>
     <div class="tool-row">
       <label>N&iacute;vel:
         <select id="readingLevel">
@@ -881,7 +897,7 @@
           <option value="6/8">6/8</option>
         </select>
       </label>
-      <label>BPM:
+      <label>BPM da leitura:
         <input id="readingBpm" type="number" value="60" min="30" max="160">
       </label>
     </div>
