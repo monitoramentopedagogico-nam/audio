@@ -117,6 +117,8 @@ const readingNextPageBtn = document.getElementById('readingNextPageBtn');
 const readingPageStatus = document.getElementById('readingPageStatus');
 const generateReadingExerciseBtn = document.getElementById('generateReadingExerciseBtn');
 const playReadingExerciseBtn = document.getElementById('playReadingExerciseBtn');
+const playReadingPageBtn = document.getElementById('playReadingPageBtn');
+const pauseReadingBtn = document.getElementById('pauseReadingBtn');
 const practiceReadingExerciseBtn = document.getElementById('practiceReadingExerciseBtn');
 const scoreFileInput = document.getElementById('scoreFileInput');
 const importScoreBtn = document.getElementById('importScoreBtn');
@@ -286,6 +288,8 @@ let readingScorePage = 0;
 let readingOsmd = null;
 let readingOsmdRenderPromise = null;
 let readingOsmdRenderToken = 0;
+let readingPlaybackRunning = false;
+let readingPlaybackPaused = false;
 
 let MIN_NOTE_RMS = 0.003;
 let SILENCE_RMS = 0.0015;
@@ -1062,8 +1066,9 @@ async function playReferenceSequence(sequence, bpm, onNoteChange, beatDurations)
 
   const finishTime = start + elapsedBeats * beat;
   const scheduleAheadSeconds = 2.5;
-  const schedulerIntervalMs = 300;
+  const schedulerIntervalMs = 40;
   let nextNoteIndex = 0;
+  let nextVisualIndex = 0;
 
   await new Promise((resolve)=>{
     const finish = ()=>{
@@ -1080,20 +1085,18 @@ async function playReferenceSequence(sequence, bpm, onNoteChange, beatDurations)
         const scheduled = scheduledNotes[nextNoteIndex];
         const frequency = writtenNoteToSoundingFrequency(scheduled.note);
         if(frequency) playReferenceTone(frequency, scheduled.noteStart, scheduled.duration);
-        if(onNoteChange){
-          const delay = Math.max(0, (scheduled.noteStart - ctx.currentTime) * 1000);
-          window.setTimeout(()=>{
-            if(playbackId === referencePlaybackId) onNoteChange(scheduled.index, scheduled.note);
-          }, delay);
-        }
         nextNoteIndex += 1;
       }
-      const remainingMs = Math.max(0, (finishTime - ctx.currentTime) * 1000);
-      if(nextNoteIndex >= scheduledNotes.length && remainingMs <= schedulerIntervalMs){
-        window.setTimeout(finish, remainingMs);
+      while(nextVisualIndex < scheduledNotes.length && scheduledNotes[nextVisualIndex].noteStart <= ctx.currentTime + 0.015){
+        const visual = scheduledNotes[nextVisualIndex];
+        if(onNoteChange) onNoteChange(visual.index, visual.note);
+        nextVisualIndex += 1;
+      }
+      if(ctx.currentTime >= finishTime){
+        finish();
         return;
       }
-      window.setTimeout(scheduleWindow, Math.min(schedulerIntervalMs, Math.max(30, remainingMs)));
+      window.setTimeout(scheduleWindow, schedulerIntervalMs);
     };
     scheduleWindow();
   });
@@ -1296,7 +1299,9 @@ if(renderLyricMelodyBtn) renderLyricMelodyBtn.addEventListener('click', renderLy
 if(playLyricMelodyBtn) playLyricMelodyBtn.addEventListener('click', playLyricMelody);
 if(practiceLyricMelodyBtn) practiceLyricMelodyBtn.addEventListener('click', practiceLyricMelody);
 if(generateReadingExerciseBtn) generateReadingExerciseBtn.addEventListener('click', generateReadingExercise);
-if(playReadingExerciseBtn) playReadingExerciseBtn.addEventListener('click', playReadingExercise);
+if(playReadingExerciseBtn) playReadingExerciseBtn.addEventListener('click', ()=>playReadingExercise());
+if(playReadingPageBtn) playReadingPageBtn.addEventListener('click', playCurrentReadingPage);
+if(pauseReadingBtn) pauseReadingBtn.addEventListener('click', toggleReadingPlaybackPause);
 if(practiceReadingExerciseBtn) practiceReadingExerciseBtn.addEventListener('click', practiceReadingExercise);
 if(importScoreBtn) importScoreBtn.addEventListener('click', importScoreFile);
 if(captureScoreBtn && scoreCameraInput) captureScoreBtn.addEventListener('click', ()=>scoreCameraInput.click());
@@ -3110,13 +3115,24 @@ async function loadSavedScores(){
   }
 }
 
-async function playReadingExercise(){
+async function playReadingExercise(startIndex = 0, endIndex = null){
+  if(readingPlaybackRunning) return;
   if(!currentReadingExercise) generateReadingExercise();
   if(!currentReadingExercise) return;
+  const finalIndex = endIndex === null ? currentReadingExercise.notes.length : Math.min(endIndex, currentReadingExercise.notes.length);
+  const sequence = currentReadingExercise.notes.slice(startIndex, finalIndex);
+  const durations = currentReadingExercise.beats.slice(startIndex, finalIndex);
+  if(!sequence.length) return;
   currentReadingExercise.bpm = syncReadingBpm();
   const longScore = currentReadingExercise.notes.length > 80;
   let previousIndex = -1;
-  await playReferenceSequence(currentReadingExercise.notes, currentReadingExercise.bpm, (index)=>{
+  readingPlaybackRunning = true;
+  readingPlaybackPaused = false;
+  if(pauseReadingBtn){ pauseReadingBtn.disabled = false; pauseReadingBtn.textContent = 'Pausar'; }
+  if(playReadingExerciseBtn) playReadingExerciseBtn.disabled = true;
+  if(playReadingPageBtn) playReadingPageBtn.disabled = true;
+  await playReferenceSequence(sequence, currentReadingExercise.bpm, (sequenceIndex)=>{
+    const index = sequenceIndex >= 0 ? startIndex + sequenceIndex : -1;
     if(previousIndex >= 0){
       const previousChip = readingNotes ? readingNotes.querySelector(`[data-score-note-index="${previousIndex}"]`) : null;
       const previousNote = readingScoreSvg ? readingScoreSvg.querySelector(`[data-score-note-index="${previousIndex}"]`) : null;
@@ -3153,7 +3169,33 @@ async function playReadingExercise(){
       readingOsmd.cursor.hide();
     }
     previousIndex = index;
-  }, currentReadingExercise.beats);
+  }, durations);
+  readingPlaybackRunning = false;
+  readingPlaybackPaused = false;
+  if(pauseReadingBtn){ pauseReadingBtn.disabled = true; pauseReadingBtn.textContent = 'Pausar'; }
+  if(playReadingExerciseBtn) playReadingExerciseBtn.disabled = false;
+  if(playReadingPageBtn) playReadingPageBtn.disabled = false;
+}
+
+function playCurrentReadingPage(){
+  if(!currentReadingExercise) generateReadingExercise();
+  if(!currentReadingExercise) return;
+  const startIndex = readingScorePage * READING_SCORE_PAGE_SIZE;
+  const endIndex = Math.min(currentReadingExercise.notes.length, startIndex + READING_SCORE_PAGE_SIZE);
+  playReadingExercise(startIndex, endIndex);
+}
+
+async function toggleReadingPlaybackPause(){
+  if(!readingPlaybackRunning || !audioCtx) return;
+  if(!readingPlaybackPaused){
+    await audioCtx.suspend();
+    readingPlaybackPaused = true;
+    if(pauseReadingBtn) pauseReadingBtn.textContent = 'Retomar';
+  } else {
+    await audioCtx.resume();
+    readingPlaybackPaused = false;
+    if(pauseReadingBtn) pauseReadingBtn.textContent = 'Pausar';
+  }
 }
 
 function practiceReadingExercise(){
