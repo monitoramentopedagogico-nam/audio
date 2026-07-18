@@ -932,11 +932,31 @@
               <option value="6/8">6/8</option>
             </select>
           </label>
+          <label>Instrumento
+            <select id="transcriptionInstrument">
+              <option value="alto" selected>Sax alto (Eb)</option>
+              <option value="tenor">Sax tenor (Bb)</option>
+              <option value="soprano">Sax soprano (Bb)</option>
+            </select>
+          </label>
+          <label>Tom da pauta
+            <select id="transcriptionKey">
+              <option value="auto" selected>Detectar automaticamente</option>
+              <option value="C">Do maior</option><option value="Db">Reb maior</option>
+              <option value="D">Re maior</option><option value="Eb">Mib maior</option>
+              <option value="E">Mi maior</option><option value="F">Fa maior</option>
+              <option value="F#">Fa# maior</option><option value="G">Sol maior</option>
+              <option value="Ab">Lab maior</option><option value="A">La maior</option>
+              <option value="Bb">Sib maior</option><option value="B">Si maior</option>
+            </select>
+          </label>
           <button id="startTranscriptionBtn" type="button">&#9679; Iniciar capta&ccedil;&atilde;o</button>
           <button id="stopTranscriptionBtn" type="button" disabled>&#9632; Finalizar</button>
           <button id="playTranscriptionBtn" type="button" disabled>&#9654; Conferir</button>
+          <button id="playTranscriptionKeyBtn" type="button" disabled>&#9835; Ouvir tom</button>
           <button id="clearTranscriptionBtn" type="button" disabled>Limpar</button>
         </div>
+        <p><strong id="transcriptionDetectedKey">Tom tocado: aguardando notas</strong></p>
         <p id="transcriptionStatus" role="status">Defina o BPM, inicie e toque com pulso constante.</p>
         <div id="studentScoreContainer" class="student-score-container"><p>A pauta aparecer&aacute; aqui.</p></div>
   </section>
