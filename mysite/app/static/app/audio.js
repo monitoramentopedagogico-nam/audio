@@ -322,6 +322,9 @@ let readingActiveEndIndex = 0;
 let readingTimelineStartIndex = 0;
 let activeReferencePlaybackBus = null;
 let studentTranscriptionOsmd = null;
+let lastMicrophoneFrameAt = 0;
+let microphoneWatchdogTimer = null;
+let lastMicrophoneDiagnosticAt = 0;
 
 let MIN_NOTE_RMS = 0.003;
 let SILENCE_RMS = 0.0015;
@@ -811,6 +814,16 @@ function captureCalibrationSample(rms){
   if(calibrationMode){
     calibrationSamples.push(rms);
     if(calibrationSamples.length > 240) calibrationSamples.shift();
+  }
+}
+
+function updateMicrophoneDiagnostic(rms){
+  const now = performance.now();
+  if(now - lastMicrophoneDiagnosticAt < 300 || calibrationMode) return;
+  lastMicrophoneDiagnosticAt = now;
+  if(calibrationStatus){
+    const state = rms >= MIN_NOTE_RMS ? 'sinal detectado' : rms >= SILENCE_RMS ? 'sinal baixo' : 'silencio';
+    calibrationStatus.textContent = `Microfone: ${state} · nivel ${rms.toFixed(4)} · limite ${MIN_NOTE_RMS.toFixed(4)}.`;
   }
 }
 
@@ -1682,6 +1695,8 @@ function start(){
   captureStartTime = performance.now();
   scoreEvents = [];
   currentScoreEvent = null;
+  lastMicrophoneFrameAt = 0;
+  if(microphoneWatchdogTimer) clearTimeout(microphoneWatchdogTimer);
   const audioConstraints = {
     echoCancellation: false,
     noiseSuppression: false,
@@ -1712,7 +1727,9 @@ function start(){
 
     // use AudioWorklet for low-latency frame access
     silentGain = audioCtx.createGain();
-    silentGain.gain.value = 0;
+    // A tiny inaudible value prevents some mobile browsers from optimizing
+    // the complete analysis graph away when the destination gain is exactly zero.
+    silentGain.gain.value = 0.00001;
     let frameProcessorStarted = false;
     if(!audioCtx.audioWorklet || !audioCtx.audioWorklet.addModule){
       startScriptProcessorFallback(hp);
@@ -1728,12 +1745,14 @@ function start(){
 
       // receive frames from worklet
       workletNode.port.onmessage = evt => {
+        lastMicrophoneFrameAt = performance.now();
         const floatBuf = evt.data; // Float32Array
         // compute RMS and pitch
         const buf = floatBuf;
         let sum=0; for(let i=0;i<buf.length;i++){ sum += buf[i]*buf[i]; }
         const rms = Math.sqrt(sum/buf.length);
         captureCalibrationSample(rms);
+        updateMicrophoneDiagnostic(rms);
         // draw spectrum from analyser
         const freqData = new Uint8Array(analyser.frequencyBinCount);
         analyser.getByteFrequencyData(freqData);
@@ -1792,6 +1811,10 @@ function start(){
         }
 
         updatePitchEstimate(buf, rms, audioCtx.sampleRate);
+        if(!currentEstimatedPitch && hasUsableSignal(rms)){
+          const spectrumPitch = estimatePitchFromSpectrum(freqData);
+          if(spectrumPitch) currentEstimatedPitch = spectrumPitch;
+        }
 
         captureTranscriptionNote(detectNoteFromPitch(currentEstimatedPitch, rms), rms);
 
@@ -1853,6 +1876,18 @@ function start(){
       console.error('AudioWorklet load failed', err);
       if(!frameProcessorStarted) startScriptProcessorFallback(hp);
     });
+    microphoneWatchdogTimer = setTimeout(()=>{
+      if(!audioCtx || lastMicrophoneFrameAt) return;
+      console.warn('AudioWorklet started without frames; switching to ScriptProcessor.');
+      if(workletNode){
+        try{ hp.disconnect(workletNode); }catch(error){}
+        try{ workletNode.disconnect(); }catch(error){}
+        workletNode = null;
+      }
+      if(!processor) startScriptProcessorFallback(hp);
+      if(transcriptionStatus) transcriptionStatus.textContent = 'Modo compativel do microfone ativado. Toque novamente.';
+      setBeginnerStatus('ready', 'Ouvindo', 'Modo compativel ativado. Toque a nota destacada novamente.');
+    }, 1500);
     }
     // route processed signal (hp -> gain) for monitoring/recording
     if(monitor.checked){ gainNode.connect(audioCtx.destination); }
@@ -1905,20 +1940,26 @@ function startScriptProcessorFallback(inputNode){
   inputNode.connect(processor);
   if(!silentGain){
     silentGain = audioCtx.createGain();
-    silentGain.gain.value = 0;
+    silentGain.gain.value = 0.00001;
   }
   processor.connect(silentGain);
   silentGain.connect(audioCtx.destination);
   processor.onaudioprocess = event => {
+    lastMicrophoneFrameAt = performance.now();
     const buf = event.inputBuffer.getChannelData(0);
     let sum = 0;
     for(let i=0;i<buf.length;i++) sum += buf[i] * buf[i];
     const rms = Math.sqrt(sum / buf.length);
     captureCalibrationSample(rms);
+    updateMicrophoneDiagnostic(rms);
     updatePitchEstimate(buf, rms, audioCtx.sampleRate);
     captureTranscriptionNote(detectNoteFromPitch(currentEstimatedPitch, rms), rms);
     const freqData = new Uint8Array(analyser.frequencyBinCount);
     analyser.getByteFrequencyData(freqData);
+    if(!currentEstimatedPitch && hasUsableSignal(rms)){
+      const spectrumPitch = estimatePitchFromSpectrum(freqData);
+      if(spectrumPitch) currentEstimatedPitch = spectrumPitch;
+    }
     drawSpectrum(freqData);
     updateLevel(freqData);
     if(rmsFillEl) rmsFillEl.style.width = Math.min(100, Math.round(Math.min(1, rms*12)*100)) + '%';
@@ -1954,6 +1995,7 @@ function stop(){
   if(audioCtx) audioCtx.close();
   audioCtx = null;
   cancelAnimationFrame(raf);
+  if(microphoneWatchdogTimer){ clearTimeout(microphoneWatchdogTimer); microphoneWatchdogTimer = null; }
   updateNoteDisplay();
   renderStudentTranscription();
 }
