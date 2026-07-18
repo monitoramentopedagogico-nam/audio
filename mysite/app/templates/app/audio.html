@@ -1,3 +1,4 @@
+{% load static %}
 <!doctype html>
 <html>
 <head>
@@ -808,7 +809,7 @@
       <button type="button" data-practice-exercise="perception_degrees">Percep&ccedil;&atilde;o</button>
       <button type="button" data-open-stage="reading">Leitura musical</button>
     </div>
-    <div id="beginnerControls">
+    <div id="beginnerControls" hidden>
       <label>Exerc&iacute;cio
         <select id="beginnerExercise">
           <option value="routine_level_1">Rotina Nivel 1</option>
@@ -1379,7 +1380,8 @@
       </button>
     </nav>
   </div>
-  <script src="/static/app/vendor/opensheetmusicdisplay-1.9.9.min.js"></script>
-  <script src="/static/app/audio.js"></script>
+  <script>window.SAX_AUDIO_WORKLET_URL = "{% static 'app/audio-worklet-processor.js' %}";</script>
+  <script src="{% static 'app/vendor/opensheetmusicdisplay-1.9.9.min.js' %}"></script>
+  <script src="{% static 'app/audio.js' %}"></script>
 </body>
 </html>
