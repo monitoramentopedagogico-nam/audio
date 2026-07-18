@@ -110,6 +110,7 @@ const playLyricMelodyBtn = document.getElementById('playLyricMelodyBtn');
 const practiceLyricMelodyBtn = document.getElementById('practiceLyricMelodyBtn');
 const lyricMelodyOutput = document.getElementById('lyricMelodyOutput');
 const readingExecutionBuilder = document.getElementById('readingExecutionBuilder');
+const transcriptionBuilder = document.getElementById('transcriptionBuilder');
 const readingLevel = document.getElementById('readingLevel');
 const readingKey = document.getElementById('readingKey');
 const readingMeter = document.getElementById('readingMeter');
@@ -208,7 +209,7 @@ function compactStageElements(){
   const progressPanels = [progressOverview, downloads, suggestions, recordingPanel].filter(Boolean);
   const profilePanels = [profilePanel].filter(Boolean);
   const dedicatedPanels = [
-    arrangementBuilder, lyricMelodyBuilder, readingExecutionBuilder,
+    arrangementBuilder, lyricMelodyBuilder, readingExecutionBuilder, transcriptionBuilder,
     ...progressPanels, ...profilePanels,
   ].filter(Boolean);
   const advancedPanels = allAdvanced.filter(el => !dedicatedPanels.includes(el));
@@ -218,6 +219,7 @@ function compactStageElements(){
       practice: [document.getElementById('beginnerPanel')],
       repertoire: [arrangementBuilder, lyricMelodyBuilder],
       reading: [readingExecutionBuilder],
+      transcription: [transcriptionBuilder],
       live: livePanels,
       progress: progressPanels,
       profile: profilePanels,
@@ -245,7 +247,7 @@ function showAppStage(stageName){
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
   if(dashboardPage){
-    ['practice','repertoire','progress','profile','reading','advanced'].forEach(name=>{
+    ['practice','repertoire','progress','profile','reading','transcription','advanced'].forEach(name=>{
       dashboardPage.classList.toggle(`stage-${name}`, name === stageName);
     });
   }
@@ -325,6 +327,7 @@ let studentTranscriptionOsmd = null;
 let lastMicrophoneFrameAt = 0;
 let microphoneWatchdogTimer = null;
 let lastMicrophoneDiagnosticAt = 0;
+let transcriptionActive = false;
 
 let MIN_NOTE_RMS = 0.003;
 let SILENCE_RMS = 0.0015;
@@ -901,6 +904,7 @@ function setBeginnerStartButtonListening(isListening){
 }
 
 function startBeginnerPractice(){
+  transcriptionActive = false;
   syncBeginnerControls();
   resetBeginnerProgress();
   beginnerActive = true;
@@ -1186,8 +1190,9 @@ function updateBeginnerPanel(pitch, rms){
     return;
   }
 
-  const tolerance = parseInt(toleranceCentsInput ? toleranceCentsInput.value || '30' : '30', 10) || 30;
-  const diffCents = Math.round(1200 * Math.log2(pitch / targetFreq));
+  const tolerance = Math.max(45, parseInt(toleranceCentsInput ? toleranceCentsInput.value || '45' : '45', 10) || 45);
+  const comparedPitch = normalizePitchOctaveNearTarget(pitch, targetFreq);
+  const diffCents = Math.round(1200 * Math.log2(comparedPitch / targetFreq));
   const absDiff = Math.abs(diffCents);
   const now = performance.now();
 
@@ -1227,8 +1232,9 @@ function updateBeginnerScalePanel(pitch, rms, step){
     renderRoutineSequenceForStep(step);
     return;
   }
-  const tolerance = parseInt(toleranceCentsInput ? toleranceCentsInput.value || '30' : '30', 10) || 30;
-  const diffCents = Math.round(1200 * Math.log2(pitch / targetFreq));
+  const tolerance = Math.max(45, parseInt(toleranceCentsInput ? toleranceCentsInput.value || '45' : '45', 10) || 45);
+  const comparedPitch = normalizePitchOctaveNearTarget(pitch, targetFreq);
+  const diffCents = Math.round(1200 * Math.log2(comparedPitch / targetFreq));
   const absDiff = Math.abs(diffCents);
   const now = performance.now();
   if(absDiff <= tolerance){
@@ -1816,7 +1822,7 @@ function start(){
           if(spectrumPitch) currentEstimatedPitch = spectrumPitch;
         }
 
-        captureTranscriptionNote(detectNoteFromPitch(currentEstimatedPitch, rms), rms);
+        if(transcriptionActive) captureTranscriptionNote(detectNoteFromPitch(currentEstimatedPitch, rms), rms);
 
         analyzeAndSuggest(freqData, currentEstimatedPitch);
         updateLevel(freqData);
@@ -1910,6 +1916,7 @@ function start(){
     if(transcriptionStatus) transcriptionStatus.textContent = message;
     if(startTranscriptionBtn) startTranscriptionBtn.disabled = false;
     if(stopTranscriptionBtn) stopTranscriptionBtn.disabled = true;
+    transcriptionActive = false;
   });
 }
 
@@ -1953,7 +1960,7 @@ function startScriptProcessorFallback(inputNode){
     captureCalibrationSample(rms);
     updateMicrophoneDiagnostic(rms);
     updatePitchEstimate(buf, rms, audioCtx.sampleRate);
-    captureTranscriptionNote(detectNoteFromPitch(currentEstimatedPitch, rms), rms);
+    if(transcriptionActive) captureTranscriptionNote(detectNoteFromPitch(currentEstimatedPitch, rms), rms);
     const freqData = new Uint8Array(analyser.frequencyBinCount);
     analyser.getByteFrequencyData(freqData);
     if(!currentEstimatedPitch && hasUsableSignal(rms)){
@@ -1998,6 +2005,7 @@ function stop(){
   if(microphoneWatchdogTimer){ clearTimeout(microphoneWatchdogTimer); microphoneWatchdogTimer = null; }
   updateNoteDisplay();
   renderStudentTranscription();
+  transcriptionActive = false;
 }
 
 async function renderStudentTranscription(){
@@ -4090,6 +4098,14 @@ function writtenNoteToSoundingFrequency(noteName){
   return midiToFrequency(midi + getInstrumentTransposeSemitones());
 }
 
+function normalizePitchOctaveNearTarget(pitch, targetFrequency){
+  if(!pitch || !targetFrequency) return pitch;
+  let normalized = pitch;
+  while(normalized / targetFrequency > Math.SQRT2) normalized /= 2;
+  while(targetFrequency / normalized > Math.SQRT2) normalized *= 2;
+  return normalized;
+}
+
 function getInstrumentLabel(){
   if(!beginnerInstrument) return 'Sax alto';
   return beginnerInstrument.options[beginnerInstrument.selectedIndex].textContent;
@@ -4449,6 +4465,7 @@ function autoCorrelate(buf, sampleRate){
 }
 
 if(startTranscriptionBtn) startTranscriptionBtn.addEventListener('click', ()=>{
+  transcriptionActive = true;
   if(transcriptionStatus) transcriptionStatus.textContent = 'Ouvindo o estudante. Toque uma nota por vez e mantenha o pulso.';
   start();
   startTranscriptionBtn.disabled = true;

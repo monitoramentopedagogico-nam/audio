@@ -205,7 +205,7 @@
       width:min(100%,520px);
       transform:translateX(-50%);
       display:grid;
-      grid-template-columns:repeat(4,1fr);
+      grid-template-columns:repeat(5,1fr);
       gap:0;
       padding:8px 10px calc(8px + env(safe-area-inset-bottom));
       background:linear-gradient(180deg,#c98222 0%,#a76116 100%);
@@ -407,7 +407,7 @@
     }
     .practice-quick-actions{
       display:grid;
-      grid-template-columns:repeat(3,minmax(0,1fr));
+      grid-template-columns:repeat(4,minmax(0,1fr));
       gap:8px;
       margin:0 0 14px;
     }
@@ -808,6 +808,7 @@
       <button type="button" data-practice-exercise="routine_level_1">Rotina di&aacute;ria</button>
       <button type="button" data-practice-exercise="perception_degrees">Percep&ccedil;&atilde;o</button>
       <button type="button" data-open-stage="reading">Leitura musical</button>
+      <button type="button" data-open-stage="transcription">Transcri&ccedil;&atilde;o</button>
     </div>
     <div id="beginnerControls" hidden>
       <label>Exerc&iacute;cio
@@ -896,9 +897,29 @@
       </label>
       <button id="worshipSaxReferenceBtn" type="button">Ouvir como sax</button>
     </div>
-    <details class="reading-disclosure" id="studentTranscriptionPanel">
-      <summary>Escrever na pauta o que eu tocar</summary>
-      <div class="reading-disclosure-content">
+    <div id="beginnerRoutine">
+      <div id="routineStepTitle">Rotina Nivel 1</div>
+      <div id="routineStepHelp">Siga os passos em ordem. O app ajusta nota, BPM e objetivo automaticamente.</div>
+      <div id="routineSequence"></div>
+      <div id="routineNav">
+        <button id="routinePrevBtn" type="button">Anterior</button>
+        <button id="routineNextBtn" type="button">Proximo</button>
+      </div>
+    </div>
+    <div id="beginnerSignal">
+      <div id="beginnerLight" class="ready">Pronto</div>
+      <div>
+        <div id="beginnerMessage">Escolha uma nota, clique em Come&ccedil;ar e tente deixar o medidor verde.</div>
+        <div id="beginnerProgress"><div id="beginnerProgressFill"></div></div>
+        <div style="margin-top:8px"><strong>Progresso:</strong> <span id="beginnerProgressText">0 de 5 segundos afinado</span></div>
+        <div><strong>Melhor sequ&ecirc;ncia:</strong> <span id="beginnerBestText">0.0 s</span></div>
+      </div>
+    </div>
+  </section>
+  <section id="transcriptionBuilder" class="tool-section stage-hidden">
+      <button class="stage-back" type="button" data-open-stage="practice">&larr; Voltar para pr&aacute;tica</button>
+      <h2>Escrever na pauta o que eu tocar</h2>
+      <p class="section-intro">Capte uma linha mel&oacute;dica independente, respeitando BPM, pausas e compasso.</p>
         <div class="tool-row">
           <label>BPM
             <input id="transcriptionBpm" type="number" value="60" min="30" max="240">
@@ -918,26 +939,6 @@
         </div>
         <p id="transcriptionStatus" role="status">Defina o BPM, inicie e toque com pulso constante.</p>
         <div id="studentScoreContainer" class="student-score-container"><p>A pauta aparecer&aacute; aqui.</p></div>
-      </div>
-    </details>
-    <div id="beginnerRoutine">
-      <div id="routineStepTitle">Rotina Nivel 1</div>
-      <div id="routineStepHelp">Siga os passos em ordem. O app ajusta nota, BPM e objetivo automaticamente.</div>
-      <div id="routineSequence"></div>
-      <div id="routineNav">
-        <button id="routinePrevBtn" type="button">Anterior</button>
-        <button id="routineNextBtn" type="button">Proximo</button>
-      </div>
-    </div>
-    <div id="beginnerSignal">
-      <div id="beginnerLight" class="ready">Pronto</div>
-      <div>
-        <div id="beginnerMessage">Escolha uma nota, clique em Come&ccedil;ar e tente deixar o medidor verde.</div>
-        <div id="beginnerProgress"><div id="beginnerProgressFill"></div></div>
-        <div style="margin-top:8px"><strong>Progresso:</strong> <span id="beginnerProgressText">0 de 5 segundos afinado</span></div>
-        <div><strong>Melhor sequ&ecirc;ncia:</strong> <span id="beginnerBestText">0.0 s</span></div>
-      </div>
-    </div>
   </section>
   <div class="dashboard-toolbar">
     <button id="advancedToggle" type="button">Mostrar ferramentas avan&ccedil;adas</button>
@@ -1359,6 +1360,15 @@
           <path d="M14 25h6M26 25h6" />
         </svg>
         <span>Repert&oacute;rio</span>
+      </button>
+      <button class="bottom-nav-button" type="button" data-stage-target="transcription" aria-label="Transcrever o que tocar">
+        <svg viewBox="0 0 48 48" aria-hidden="true">
+          <path d="M29 7v25" />
+          <path d="M29 11 41 8v21" />
+          <ellipse cx="23" cy="34" rx="7" ry="5" />
+          <ellipse cx="35" cy="31" rx="7" ry="5" />
+        </svg>
+        <span>Transcrever</span>
       </button>
       <button class="bottom-nav-button" type="button" data-stage-target="progress" aria-label="Progresso">
         <svg viewBox="0 0 48 48" aria-hidden="true">
