@@ -1684,6 +1684,7 @@ function start(){
     channelCount: 1
   };
   navigator.mediaDevices.getUserMedia({audio: audioConstraints}).then(stream=>{
+    if(transcriptionStatus) transcriptionStatus.textContent = 'Microfone ativo. Toque notas claras e sustente cada figura pelo tempo desejado.';
     source = audioCtx.createMediaStreamSource(stream);
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 2048;
@@ -1787,25 +1788,7 @@ function start(){
 
         updatePitchEstimate(buf, rms, audioCtx.sampleRate);
 
-        const note = detectNoteFromPitch(currentEstimatedPitch, rms);
-        const currentTime = performance.now() - captureStartTime;
-        if (note && hasUsableSignal(rms)) {
-          if (note !== lastDetectedNote) {
-            if (currentScoreEvent) {
-              currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
-            }
-            currentScoreEvent = {note, start: currentTime, duration: 0};
-            scoreEvents.push(currentScoreEvent);
-            lastDetectedNote = note;
-            noteHistory.push(note);
-            if (noteHistory.length > 16) noteHistory.shift();
-            updateNoteDisplay();
-          }
-        } else if (lastDetectedNote && currentScoreEvent) {
-          currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
-          currentScoreEvent = null;
-          lastDetectedNote = null;
-        }
+        captureTranscriptionNote(detectNoteFromPitch(currentEstimatedPitch, rms), rms);
 
         analyzeAndSuggest(freqData, currentEstimatedPitch);
         updateLevel(freqData);
@@ -1884,7 +1867,30 @@ function start(){
     calibrationMode = null;
     if(calibrateMicBtn) calibrateMicBtn.disabled = false;
     if(calibrationStatus) calibrationStatus.textContent = 'Falha ao acessar o microfone.';
+    if(transcriptionStatus) transcriptionStatus.textContent = message;
+    if(startTranscriptionBtn) startTranscriptionBtn.disabled = false;
+    if(stopTranscriptionBtn) stopTranscriptionBtn.disabled = true;
   });
+}
+
+function captureTranscriptionNote(note, rms){
+  const currentTime = performance.now() - captureStartTime;
+  if(note && hasUsableSignal(rms)){
+    if(note !== lastDetectedNote){
+      if(currentScoreEvent) currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
+      currentScoreEvent = {note, start:currentTime, duration:0};
+      scoreEvents.push(currentScoreEvent);
+      lastDetectedNote = note;
+      noteHistory.push(note);
+      if(noteHistory.length > 16) noteHistory.shift();
+      updateNoteDisplay();
+      if(transcriptionStatus) transcriptionStatus.textContent = `Captando: ${noteToWrittenSolfege(note)} (${note}) · ${scoreEvents.length} nota${scoreEvents.length === 1 ? '' : 's'}`;
+    }
+  } else if(lastDetectedNote && currentScoreEvent){
+    currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
+    currentScoreEvent = null;
+    lastDetectedNote = null;
+  }
 }
 
 function startScriptProcessorFallback(inputNode){
@@ -1905,6 +1911,7 @@ function startScriptProcessorFallback(inputNode){
     const rms = Math.sqrt(sum / buf.length);
     captureCalibrationSample(rms);
     updatePitchEstimate(buf, rms, audioCtx.sampleRate);
+    captureTranscriptionNote(detectNoteFromPitch(currentEstimatedPitch, rms), rms);
     const freqData = new Uint8Array(analyser.frequencyBinCount);
     analyser.getByteFrequencyData(freqData);
     drawSpectrum(freqData);
@@ -2135,16 +2142,14 @@ function updatePitchEstimate(buf, rms, sampleRate){
 
 function detectNoteFromPitch(pitch, rms){
   if (!pitch || !hasUsableSignal(rms)) return null;
-  const noteNames = ['Dó','Dó#','Ré','Ré#','Mi','Fá','Fá#','Sol','Sol#','Lá','Lá#','Si'];
   const a4 = 440;
   const midi = 12 * Math.log2(pitch / a4) + 69;
   const midiRounded = Math.round(midi);
-  const octave = Math.floor(midiRounded / 12) - 1;
-  const noteIndex = ((midiRounded % 12) + 12) % 12;
-  return `${noteNames[noteIndex]}${octave}`;
+  return midiToNoteName(midiRounded);
 }
 
 function getNoteY(noteName){
+  if(/^[A-G](?:#|b)?-?\d+$/.test(String(noteName || ''))) return noteYFromScientificName(noteName);
   const noteMap = {
     'do': 0, 'do#': 1, 're': 2, 're#': 3, 'mi': 4,
     'fa': 5, 'fa#': 6, 'sol': 7, 'sol#': 8, 'la': 9, 'la#': 10, 'si': 11
