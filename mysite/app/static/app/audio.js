@@ -741,10 +741,9 @@ function loadMicCalibration(){
   try {
     const saved = JSON.parse(localStorage.getItem('sax_mic_calibration_v1') || 'null');
     if(saved && saved.minNoteRms && saved.silenceRms){
-      MIN_NOTE_RMS = saved.minNoteRms;
-      SILENCE_RMS = saved.silenceRms;
       calibratedNoiseRms = saved.noiseRms || SILENCE_RMS;
       calibratedNoteRms = saved.noteRms || MIN_NOTE_RMS;
+      applyMicCalibrationThresholds(calibratedNoiseRms, calibratedNoteRms);
       if(calibrationStatus) calibrationStatus.textContent = `Calibrado: ruído ${calibratedNoiseRms.toFixed(4)}, nota ${calibratedNoteRms.toFixed(4)}.`;
     }
   } catch(e) {
@@ -752,11 +751,17 @@ function loadMicCalibration(){
   }
 }
 
+function applyMicCalibrationThresholds(noiseRms, noteRms){
+  const usefulRange = Math.max(0.0005, noteRms - noiseRms);
+  SILENCE_RMS = Math.max(0.0005, noiseRms + usefulRange * 0.06);
+  MIN_NOTE_RMS = Math.max(0.0012, noiseRms * 1.2, noiseRms + usefulRange * 0.25);
+  if(MIN_NOTE_RMS >= noteRms * 0.8) MIN_NOTE_RMS = Math.max(0.0012, noteRms * 0.55);
+}
+
 function saveMicCalibration(noiseRms, noteRms){
   calibratedNoiseRms = noiseRms;
   calibratedNoteRms = noteRms;
-  SILENCE_RMS = Math.max(0.0005, noiseRms * 1.8);
-  MIN_NOTE_RMS = Math.max(SILENCE_RMS * 1.6, noteRms * 0.35, 0.0012);
+  applyMicCalibrationThresholds(noiseRms, noteRms);
   localStorage.setItem('sax_mic_calibration_v1', JSON.stringify({
     noiseRms,
     noteRms,
