@@ -123,7 +123,32 @@ class UploadSecurityTests(TestCase):
         self.assertEqual(response.json()['beats'], [1.0, 2.0])
         self.assertEqual(response.json()['bpm'], 72)
         self.assertEqual(response.json()['meter'], '4/4')
+        self.assertEqual(response.json()['key_fifths'], 0)
         self.assertEqual(response.json()['measure_starts'], [])
+        self.assertEqual(response.json()['source_measure_note_starts'], [0])
+        self.assertIn('<score-partwise', response.json()['source_musicxml'])
+
+    def test_imports_long_musicxml_without_truncating_at_256_notes(self):
+        notes = ''.join(
+            '<note><pitch><step>G</step><octave>4</octave></pitch>'
+            '<duration>1</duration><voice>1</voice></note>'
+            for _ in range(300)
+        )
+        xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<score-partwise version="4.0">'
+            '<part-list><score-part id="P1"><part-name>Sax</part-name></score-part></part-list>'
+            '<part id="P1"><measure number="1">'
+            '<attributes><divisions>1</divisions></attributes>'
+            f'{notes}</measure></part></score-partwise>'
+        ).encode()
+        score = SimpleUploadedFile(
+            'long-score.musicxml', xml,
+            content_type='application/vnd.recordare.musicxml+xml',
+        )
+        response = self.client.post(reverse('import_score'), {'score': score})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()['notes']), 300)
 
     def test_rejects_score_with_falsified_extension(self):
         fake_score = SimpleUploadedFile('score.pdf', b'<script>alert(1)</script>', content_type='application/pdf')

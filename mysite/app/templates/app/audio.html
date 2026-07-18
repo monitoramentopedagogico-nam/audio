@@ -35,16 +35,18 @@
     }
     button,select,input,textarea{font:inherit}
     button{
-      min-height:40px;
+      min-height:48px;
       border:1px solid var(--line-strong);
-      border-radius:6px;
+      border-radius:8px;
       background:var(--surface);
       color:var(--ink);
-      padding:8px 12px;
+      padding:9px 14px;
       cursor:pointer;
+      font-weight:600;
+      transition:background .15s ease,border-color .15s ease,color .15s ease,transform .15s ease;
     }
-    button:hover:not(:disabled){border-color:var(--accent);background:var(--accent-soft)}
-    button:disabled{opacity:.55;cursor:not-allowed}
+    button:hover:not(:disabled){border-color:var(--accent);background:var(--accent-soft);transform:translateY(-1px)}
+    button:disabled{opacity:.48;cursor:not-allowed;background:#f3f1ed;color:#7a8185}
     select,input,textarea{
       border:1px solid var(--line-strong);
       border-radius:6px;
@@ -71,7 +73,7 @@
         linear-gradient(135deg,rgba(18,59,71,.97),rgba(31,98,90,.94)),
         repeating-linear-gradient(0deg,rgba(255,255,255,.18) 0 1px,transparent 1px 14px);
       color:#fff;
-      padding:24px clamp(14px,3vw,32px);
+      padding:16px clamp(14px,3vw,32px);
       border-bottom:4px solid var(--gold);
     }
     .dashboard-header::after{
@@ -102,14 +104,16 @@
     .dashboard-header p{color:#e6ede9;margin:0}
     .dashboard-shell{
       display:grid;
-      grid-template-columns:minmax(0,1fr) minmax(280px,360px);
+      grid-template-columns:minmax(0,1fr);
       gap:16px;
-      padding:16px clamp(10px,3vw,28px) 28px;
+      width:min(1180px,100%);
+      margin:0 auto;
+      padding:14px clamp(10px,3vw,28px) 28px;
       align-items:start;
     }
     .dashboard-main,.dashboard-side{display:grid;gap:16px}
     .dashboard-page:not(.stage-practice) .dashboard-shell{grid-template-columns:minmax(0,1fr)}
-    .dashboard-page:not(.stage-practice) .dashboard-side{display:none}
+    .dashboard-side{display:none}
     .dashboard-card,
     #beginnerPanel,
     .tool-section,
@@ -129,6 +133,12 @@
       grid-template-columns:repeat(4,minmax(0,1fr));
       gap:10px;
     }
+    .practice-status-details{padding:0!important;overflow:hidden}
+    .practice-status-details > summary{cursor:pointer;list-style:none;padding:12px 14px;font-weight:800;color:var(--ink)}
+    .practice-status-details > summary::-webkit-details-marker{display:none}
+    .practice-status-details > summary::after{content:"+";float:right;color:var(--accent);font-size:20px;line-height:1}
+    .practice-status-details[open] > summary::after{content:"−"}
+    .practice-status-details .status-grid{padding:0 12px 12px}
     .status-card{
       min-height:78px;
       background:var(--surface);
@@ -422,6 +432,8 @@
     .reading-disclosure[open] > summary::after{content:"−"}
     .reading-disclosure-content{padding:0 10px 10px}
     .reading-disclosure-content.reading-theory-grid{margin:0}
+    .student-score-container{margin-top:10px;min-height:150px;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff;overflow-x:auto}
+    .student-score-container svg{display:block;width:100%;min-width:560px;height:auto}
     .score-import-panel{
       display:flex;
       gap:10px;
@@ -492,6 +504,23 @@
     .reading-primary-actions button{font-weight:800}
     #playReadingExerciseBtn{background:var(--accent);border-color:var(--accent);color:#fff}
     #readingSummary{margin:10px 0 0;font-size:14px}
+    #beginnerStartBtn,#startBtn,#recStart,#startExerciseBtn,#startMetronomeBtn,
+    #playScoreBtn,#playReadingExerciseBtn,#playReadingPageBtn,#playArrangementBtn,
+    #playLyricMelodyBtn,#worshipSaxReferenceBtn,#listenRef{
+      background:var(--accent)!important;
+      border-color:var(--accent)!important;
+      color:#fff!important;
+      font-weight:800;
+    }
+    #beginnerStopBtn,#stopBtn,#recStop,#stopExerciseBtn,#stopMetronomeBtn,#stopLabelRec{
+      background:#fff8f7!important;
+      border-color:#d9a09b!important;
+      color:var(--danger)!important;
+    }
+    #beginnerRepeatBtn,#repeatReadingBtn{background:var(--surface-soft)!important;font-weight:800}
+    #pauseReadingBtn{background:var(--surface-soft);color:var(--muted)}
+    #stopReadingBtn{background:#fff4f2;color:#9f3028;border-color:#dca9a4}
+    input[type="number"]{text-align:center;font-weight:700;padding:7px}
     #chordSheetInput,#lyricMelodyInput{
       width:100%;
       margin-top:10px;
@@ -536,6 +565,50 @@
     }
     #scoreContainer svg{width:100%;max-width:620px;height:auto;display:block}
     #readingScoreSvg{max-width:100%;overflow-x:auto;scroll-behavior:smooth;scrollbar-gutter:stable}
+    .score-player-shell{margin-top:12px;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#e8e7ea}
+    .score-player-toolbar{position:sticky;top:0;z-index:12;display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding:8px;background:rgba(255,253,248,.97);border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
+    .score-player-toolbar button{
+      width:auto;
+      min-width:72px;
+      min-height:38px;
+      padding:6px 10px;
+      font-size:14px;
+      line-height:1.15;
+      white-space:nowrap;
+    }
+    #playReadingExerciseBtn,#pauseReadingBtn,#stopReadingBtn,#repeatReadingBtn{min-width:84px}
+    #readingBpmMinus,#readingBpmPlus{min-width:38px;width:38px;padding:4px}
+    #readingFullscreen{min-width:78px}
+    .score-player-toolbar button.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-strong)}
+    .score-player-time{font-variant-numeric:tabular-nums;color:var(--muted);min-width:92px;text-align:center}
+    .score-player-spacer{flex:1}
+    .score-bpm-stepper{display:flex;align-items:center;gap:4px;font-weight:700}
+    .score-bpm-stepper input{width:62px;min-height:36px;text-align:center}
+    .score-progress{height:8px;background:#cbc7d0;cursor:pointer;touch-action:none;position:relative}
+    .score-progress:hover{height:10px}
+    #readingProgressFill{height:100%;width:0;background:var(--accent);transition:width .08s linear}
+    .score-comparison-area{display:block}
+    .score-page-surface{margin:14px;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.12)}
+    .score-view-caption{display:none;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--surface-soft);color:var(--ink)}
+    .score-player-shell.original-comparison .score-comparison-area{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start;gap:10px;padding:10px}
+    .score-player-shell.original-comparison .score-page-surface{min-width:0;margin:0}
+    .score-player-shell.original-comparison .score-study-surface{order:2;position:sticky;top:68px}
+    .score-player-shell.original-comparison #readingOriginalView{order:1}
+    .score-player-shell.original-comparison .score-view-caption{display:block}
+    .score-player-shell.original-comparison.execution-hidden .score-comparison-area{grid-template-columns:1fr}
+    .score-player-shell.original-comparison.execution-hidden .score-study-surface{display:none}
+    #toggleExecutionViewBtn[hidden]{display:none}
+    .score-view-switch{display:flex;gap:7px;margin:10px 0 0}
+    .score-view-switch button{width:auto;min-height:38px;padding:6px 12px;background:var(--surface-soft);color:var(--ink)}
+    .score-view-switch button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+    #readingOriginalView{position:relative;min-height:520px;background:#fff}
+    #readingOriginalView iframe{display:block;width:100%;height:72vh;min-height:520px;border:0}
+    #readingOriginalView img{display:block;max-width:100%;height:auto;margin:auto}
+    .original-playback-guide{position:sticky;top:0;z-index:5;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:9px 12px;background:rgba(18,28,36,.92);color:#fff;box-shadow:0 2px 7px rgba(0,0,0,.2)}
+    .original-playback-guide strong{min-width:145px}
+    .original-guide-track{height:8px;border-radius:999px;background:rgba(255,255,255,.25);overflow:hidden}
+    .original-guide-fill{width:0;height:100%;background:#52c7a1;transition:width .08s linear}
+    .original-guide-position{font-variant-numeric:tabular-nums;white-space:nowrap}
     #readingScoreSvg svg{width:100%;max-width:720px;height:auto;display:block}
     #readingScoreSvg.osmd-rendering svg{width:100%!important;max-width:none!important;height:auto!important}
     #readingScoreSvg .reading-note-head{
@@ -648,10 +721,22 @@
         -webkit-overflow-scrolling:touch;
         overscroll-behavior-x:contain;
         touch-action:pan-x;
-        border:1px solid var(--line);
-        border-radius:7px;
-        background:#fffdf8;
+        background:#fff;
       }
+      .score-player-toolbar{overflow-x:auto;position:sticky;top:0;flex-wrap:nowrap;gap:6px;padding:6px}
+      .score-player-toolbar button{flex:0 0 auto;min-width:68px;min-height:42px;padding:5px 8px;font-size:12px}
+      #playReadingExerciseBtn,#pauseReadingBtn,#stopReadingBtn,#repeatReadingBtn{min-width:78px}
+      #readingBpmMinus,#readingBpmPlus{min-width:40px;width:40px}
+      #readingFullscreen{min-width:74px}
+      .score-player-time{min-width:78px;font-size:12px}
+      .score-bpm-stepper input{width:54px!important;min-height:42px}
+      .score-player-spacer{display:none}
+      .score-page-surface{margin:7px}
+      .score-player-shell.original-comparison .score-comparison-area{grid-template-columns:1fr;padding:7px}
+      .score-player-shell.original-comparison .score-study-surface{order:1;position:static}
+      .score-player-shell.original-comparison #readingOriginalView{order:2}
+      .original-playback-guide{grid-template-columns:1fr auto;font-size:12px}
+      .original-guide-track{grid-column:1 / -1;grid-row:2}
       #readingScoreSvg svg{height:150px;width:auto;max-width:none}
       .reading-note-strip{flex-wrap:nowrap;overflow-x:auto;padding:2px 0 7px;-webkit-overflow-scrolling:touch}
       .reading-note-strip span{flex:0 0 auto;font-size:14px;padding:6px}
@@ -686,7 +771,9 @@
 
     <div class="dashboard-shell">
       <main class="dashboard-main">
-        <section class="status-grid" aria-label="Resumo da pr&aacute;tica">
+        <details id="practiceStatusDetails" class="dashboard-card practice-status-details">
+          <summary>Medi&ccedil;&otilde;es da pr&aacute;tica</summary>
+          <section class="status-grid" aria-label="Resumo da pr&aacute;tica">
           <div class="status-card">
             <div class="status-label">Nota atual</div>
             <div class="status-value"><span id="currentNoteSummary">--</span></div>
@@ -703,7 +790,8 @@
             <div class="status-label">Objetivo</div>
             <div class="status-value"><span id="targetSummary">Iniciante</span></div>
           </div>
-        </section>
+          </section>
+        </details>
 
         <nav class="app-stage-nav" aria-label="Etapas do aplicativo">
           <button class="stage-button is-active" type="button" data-stage-target="practice">Praticar</button>
@@ -751,12 +839,12 @@
       </label>
     </div>
     <div class="practice-play-panel" aria-label="Controles de estudo">
-      <button id="beginnerRepeatBtn" type="button">[ &#8635; REPETIR ]</button>
-      <button id="beginnerStartBtn" type="button">[ &#9654; TOCAR ]</button>
-      <button id="beginnerStopBtn" type="button" disabled>[ &#9632; PARAR ]</button>
-      <button id="beginnerReferenceBtn" type="button">[ &#9835; REFER&Ecirc;NCIA ]</button>
-      <button id="beginnerMetronomeBtn" type="button">[ &#9833; METR&Ocirc;NOMO ]</button>
-      <button id="calibrateMicBtn" type="button">[ MIC CALIBRAR ]</button>
+      <button id="beginnerRepeatBtn" type="button">&#8635; Repetir</button>
+      <button id="beginnerStartBtn" type="button">&#9654; Executar</button>
+      <button id="beginnerStopBtn" type="button" disabled>&#9632; Parar</button>
+      <button id="beginnerReferenceBtn" type="button">&#9835; Refer&ecirc;ncia</button>
+      <button id="beginnerMetronomeBtn" type="button">&#9833; Metr&ocirc;nomo</button>
+      <button id="calibrateMicBtn" type="button">Calibrar mic</button>
       <div class="play-panel-status" id="calibrationStatus">Calibra&ccedil;&atilde;o recomendada no celular.</div>
       <span class="play-corner" aria-hidden="true">+</span>
     </div>
@@ -807,6 +895,30 @@
       </label>
       <button id="worshipSaxReferenceBtn" type="button">Ouvir como sax</button>
     </div>
+    <details class="reading-disclosure" id="studentTranscriptionPanel">
+      <summary>Escrever na pauta o que eu tocar</summary>
+      <div class="reading-disclosure-content">
+        <div class="tool-row">
+          <label>BPM
+            <input id="transcriptionBpm" type="number" value="60" min="30" max="240">
+          </label>
+          <label>Compasso
+            <select id="transcriptionMeter">
+              <option value="4/4" selected>4/4</option>
+              <option value="2/4">2/4</option>
+              <option value="3/4">3/4</option>
+              <option value="6/8">6/8</option>
+            </select>
+          </label>
+          <button id="startTranscriptionBtn" type="button">&#9679; Iniciar capta&ccedil;&atilde;o</button>
+          <button id="stopTranscriptionBtn" type="button" disabled>&#9632; Finalizar</button>
+          <button id="playTranscriptionBtn" type="button" disabled>&#9654; Conferir</button>
+          <button id="clearTranscriptionBtn" type="button" disabled>Limpar</button>
+        </div>
+        <p id="transcriptionStatus" role="status">Defina o BPM, inicie e toque com pulso constante.</p>
+        <div id="studentScoreContainer" class="student-score-container"><p>A pauta aparecer&aacute; aqui.</p></div>
+      </div>
+    </details>
     <div id="beginnerRoutine">
       <div id="routineStepTitle">Rotina Nivel 1</div>
       <div id="routineStepHelp">Siga os passos em ordem. O app ajusta nota, BPM e objetivo automaticamente.</div>
@@ -938,17 +1050,23 @@
       <label>Tom:
         <select id="readingKey">
           <option value="C4">Do maior</option>
+          <option value="Db4">Reb maior</option>
           <option value="D4">Re maior</option>
+          <option value="Eb4">Mib maior</option>
           <option value="E4">Mi maior</option>
           <option value="F4">Fa maior</option>
+          <option value="F#4">Fa# maior</option>
           <option value="G4" selected>Sol maior</option>
+          <option value="Ab4">Lab maior</option>
           <option value="A4">La maior</option>
           <option value="Bb4">Sib maior</option>
+          <option value="B4">Si maior</option>
         </select>
       </label>
       <label>Compasso:
         <select id="readingMeter">
           <option value="4/4" selected>4/4</option>
+          <option value="2/4">2/4</option>
           <option value="3/4">3/4</option>
           <option value="6/8">6/8</option>
         </select>
@@ -965,7 +1083,33 @@
         <div class="theory-card"><strong>Fun&ccedil;&atilde;o</strong><span id="readingFunctionTheory">Observe repouso, movimento e resolu&ccedil;&atilde;o nas notas fortes.</span></div>
       </div>
     </details>
-    <div id="readingScoreSvg" aria-live="polite"></div>
+    <div id="scorePlayerShell" class="score-player-shell">
+      <div class="score-view-switch" aria-label="Modo de visualiza&ccedil;&atilde;o">
+        <button id="readingStudyModeBtn" class="active" type="button">Modo de estudo</button>
+        <button id="readingOriginalModeBtn" type="button" disabled>Partitura original</button>
+        <button id="toggleExecutionViewBtn" type="button" hidden>Ocultar execu&ccedil;&atilde;o</button>
+      </div>
+      <div class="score-player-toolbar">
+        <button id="playReadingExerciseBtn" type="button">&#9654; Executar</button>
+        <button id="pauseReadingBtn" type="button" disabled>&#10074;&#10074; Pausar</button>
+        <button id="stopReadingBtn" type="button" disabled>&#9632; Parar</button>
+        <button id="repeatReadingBtn" type="button" aria-pressed="false">&#8634; Repetir</button>
+        <span id="readingPlaybackTime" class="score-player-time">00:00 / 00:00</span>
+        <span class="score-player-spacer"></span>
+        <div class="score-bpm-stepper">
+          <span>BPM</span>
+          <button id="readingBpmMinus" type="button" aria-label="Diminuir BPM">&minus;</button>
+          <input id="readingToolbarBpm" type="number" value="60" min="30" max="160" aria-label="BPM da execu&ccedil;&atilde;o">
+          <button id="readingBpmPlus" type="button" aria-label="Aumentar BPM">+</button>
+        </div>
+        <button id="readingFullscreen" type="button">Tela cheia</button>
+      </div>
+      <div id="readingProgress" class="score-progress" role="slider" tabindex="0" aria-label="Posi&ccedil;&atilde;o da reprodu&ccedil;&atilde;o" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="readingProgressFill"></div></div>
+      <div class="score-comparison-area">
+        <div class="score-page-surface score-study-surface"><strong class="score-view-caption">Pauta reconhecida &mdash; cursor de execu&ccedil;&atilde;o</strong><div id="readingScoreSvg" aria-live="polite"></div></div>
+        <div id="readingOriginalView" class="score-page-surface" hidden></div>
+      </div>
+    </div>
     <div id="readingPageNav" class="reading-page-nav" hidden>
       <button id="readingPrevPageBtn" type="button">&larr; Anterior</button>
       <span id="readingPageStatus">P&aacute;gina 1 de 1</span>
@@ -974,9 +1118,7 @@
     <div id="readingNotes" class="reading-note-strip"></div>
     <div class="tool-row reading-primary-actions">
       <button id="generateReadingExerciseBtn" type="button">Gerar exerc&iacute;cio</button>
-      <button id="playReadingExerciseBtn" type="button">Executar tudo</button>
       <button id="playReadingPageBtn" type="button">Ouvir esta p&aacute;gina</button>
-      <button id="pauseReadingBtn" type="button" disabled>Pausar</button>
       <button id="practiceReadingExerciseBtn" type="button">Praticar leitura</button>
     </div>
     <p id="readingSummary">Exerc&iacute;cio inicial: leia as notas em Sol maior e toque com som est&aacute;vel.</p>

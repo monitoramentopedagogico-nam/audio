@@ -22,6 +22,7 @@ const dlList = document.getElementById('dlList');
 const pitchLabel = document.getElementById('pitch');
 const centsLabel = document.getElementById('cents');
 const currentNoteSummary = document.getElementById('currentNoteSummary');
+const practiceStatusDetails = document.getElementById('practiceStatusDetails');
 const pitchSummary = document.getElementById('pitchSummary');
 const centsSummary = document.getElementById('centsSummary');
 const targetSummary = document.getElementById('targetSummary');
@@ -37,6 +38,14 @@ const exportMusicXMLBtn = document.getElementById('exportMusicXMLBtn');
 const exportMidiBtn = document.getElementById('exportMidiBtn');
 const playScoreBtn = document.getElementById('playScoreBtn');
 const clearScoreBtn = document.getElementById('clearScoreBtn');
+const transcriptionBpm = document.getElementById('transcriptionBpm');
+const transcriptionMeter = document.getElementById('transcriptionMeter');
+const startTranscriptionBtn = document.getElementById('startTranscriptionBtn');
+const stopTranscriptionBtn = document.getElementById('stopTranscriptionBtn');
+const playTranscriptionBtn = document.getElementById('playTranscriptionBtn');
+const clearTranscriptionBtn = document.getElementById('clearTranscriptionBtn');
+const transcriptionStatus = document.getElementById('transcriptionStatus');
+const studentScoreContainer = document.getElementById('studentScoreContainer');
 // exercise UI
 const exerciseSelect = document.getElementById('exerciseSelect');
 const startExerciseBtn = document.getElementById('startExerciseBtn');
@@ -119,6 +128,20 @@ const generateReadingExerciseBtn = document.getElementById('generateReadingExerc
 const playReadingExerciseBtn = document.getElementById('playReadingExerciseBtn');
 const playReadingPageBtn = document.getElementById('playReadingPageBtn');
 const pauseReadingBtn = document.getElementById('pauseReadingBtn');
+const stopReadingBtn = document.getElementById('stopReadingBtn');
+const repeatReadingBtn = document.getElementById('repeatReadingBtn');
+const readingPlaybackTime = document.getElementById('readingPlaybackTime');
+const readingProgressFill = document.getElementById('readingProgressFill');
+const readingProgress = document.getElementById('readingProgress');
+const readingToolbarBpm = document.getElementById('readingToolbarBpm');
+const readingBpmMinus = document.getElementById('readingBpmMinus');
+const readingBpmPlus = document.getElementById('readingBpmPlus');
+const readingFullscreen = document.getElementById('readingFullscreen');
+const scorePlayerShell = document.getElementById('scorePlayerShell');
+const readingStudyModeBtn = document.getElementById('readingStudyModeBtn');
+const readingOriginalModeBtn = document.getElementById('readingOriginalModeBtn');
+const toggleExecutionViewBtn = document.getElementById('toggleExecutionViewBtn');
+const readingOriginalView = document.getElementById('readingOriginalView');
 const practiceReadingExerciseBtn = document.getElementById('practiceReadingExerciseBtn');
 const scoreFileInput = document.getElementById('scoreFileInput');
 const importScoreBtn = document.getElementById('importScoreBtn');
@@ -152,6 +175,7 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 function updateDashboardSummary(note, pitch, centsText){
+  if(note && practiceStatusDetails) practiceStatusDetails.open = true;
   if(currentNoteSummary) currentNoteSummary.textContent = note || '--';
   if(pitchSummary) pitchSummary.textContent = pitch ? pitch.toFixed(1) : '--';
   if(centsSummary) centsSummary.textContent = centsText || '--';
@@ -290,6 +314,14 @@ let readingOsmdRenderPromise = null;
 let readingOsmdRenderToken = 0;
 let readingPlaybackRunning = false;
 let readingPlaybackPaused = false;
+let readingRepeatEnabled = false;
+let readingScoreZoom = 1;
+let readingPlaybackSessionId = 0;
+let readingActiveStartIndex = 0;
+let readingActiveEndIndex = 0;
+let readingTimelineStartIndex = 0;
+let activeReferencePlaybackBus = null;
+let studentTranscriptionOsmd = null;
 
 let MIN_NOTE_RMS = 0.003;
 let SILENCE_RMS = 0.0015;
@@ -846,7 +878,7 @@ function showBeginnerPerformance(step, reason){
 function setBeginnerStartButtonListening(isListening){
   if(!beginnerStartBtn) return;
   beginnerStartBtn.classList.toggle('is-listening', isListening);
-  beginnerStartBtn.textContent = isListening ? '[ \u25b6 OUVINDO ]' : '[ \u25b6 TOCAR ]';
+  beginnerStartBtn.textContent = isListening ? '\u25b6 Ouvindo' : '\u25b6 Executar';
   if(dashboardPage) dashboardPage.classList.toggle('practice-active', isListening);
 }
 
@@ -1003,7 +1035,7 @@ function getReferenceReverbBus(ctx){
   return bus;
 }
 
-function playReferenceTone(frequency, startTime, duration){
+function playReferenceTone(frequency, startTime, duration, destinationBus = null){
   const output = audioCtx.createGain();
   const filter = audioCtx.createBiquadFilter();
   const vibrato = audioCtx.createOscillator();
@@ -1043,8 +1075,12 @@ function playReferenceTone(frequency, startTime, duration){
   });
 
   filter.connect(output);
-  output.connect(audioCtx.destination);
-  output.connect(getReferenceReverbBus(audioCtx).input);
+  if(destinationBus){
+    output.connect(destinationBus);
+  } else {
+    output.connect(audioCtx.destination);
+    output.connect(getReferenceReverbBus(audioCtx).input);
+  }
   vibrato.start(startTime + 0.12);
   vibrato.stop(startTime + duration + 0.03);
 }
@@ -1054,6 +1090,16 @@ async function playReferenceSequence(sequence, bpm, onNoteChange, beatDurations)
   const beat = 60 / clampBpm(bpm || 60);
   const start = ctx.currentTime + 0.08;
   const playbackId = ++referencePlaybackId;
+  if(activeReferencePlaybackBus){
+    activeReferencePlaybackBus.gain.cancelScheduledValues(ctx.currentTime);
+    activeReferencePlaybackBus.gain.setValueAtTime(0, ctx.currentTime);
+    try{ activeReferencePlaybackBus.disconnect(); }catch(error){}
+  }
+  const playbackBus = ctx.createGain();
+  playbackBus.gain.setValueAtTime(1, ctx.currentTime);
+  playbackBus.connect(ctx.destination);
+  playbackBus.connect(getReferenceReverbBus(ctx).input);
+  activeReferencePlaybackBus = playbackBus;
   let elapsedBeats = 0;
   const scheduledNotes = sequence.map((note, index)=>{
     const noteBeats = Math.max(0.125, Number(beatDurations && beatDurations[index]) || 1);
@@ -1084,7 +1130,7 @@ async function playReferenceSequence(sequence, bpm, onNoteChange, beatDurations)
       while(nextNoteIndex < scheduledNotes.length && scheduledNotes[nextNoteIndex].noteStart <= horizon){
         const scheduled = scheduledNotes[nextNoteIndex];
         const frequency = writtenNoteToSoundingFrequency(scheduled.note);
-        if(frequency) playReferenceTone(frequency, scheduled.noteStart, scheduled.duration);
+        if(frequency) playReferenceTone(frequency, scheduled.noteStart, scheduled.duration, playbackBus);
         nextNoteIndex += 1;
       }
       while(nextVisualIndex < scheduledNotes.length && scheduledNotes[nextVisualIndex].noteStart <= ctx.currentTime + 0.015){
@@ -1100,10 +1146,12 @@ async function playReferenceSequence(sequence, bpm, onNoteChange, beatDurations)
     };
     scheduleWindow();
   });
+  if(activeReferencePlaybackBus === playbackBus) activeReferencePlaybackBus = null;
+  try{ playbackBus.disconnect(); }catch(error){}
 }
 
 function updateBeginnerMetronomeButton(){
-  if(beginnerMetronomeBtn) beginnerMetronomeBtn.textContent = metronomeIntervalId ? '[ \u266a METR\u00d4NOMO ON ]' : '[ \u2669 METR\u00d4NOMO ]';
+  if(beginnerMetronomeBtn) beginnerMetronomeBtn.textContent = metronomeIntervalId ? '\u266a Metr\u00f4nomo ligado' : '\u2669 Metr\u00f4nomo';
 }
 
 function updateBeginnerPanel(pitch, rms){
@@ -1302,6 +1350,54 @@ if(generateReadingExerciseBtn) generateReadingExerciseBtn.addEventListener('clic
 if(playReadingExerciseBtn) playReadingExerciseBtn.addEventListener('click', ()=>playReadingExercise());
 if(playReadingPageBtn) playReadingPageBtn.addEventListener('click', playCurrentReadingPage);
 if(pauseReadingBtn) pauseReadingBtn.addEventListener('click', toggleReadingPlaybackPause);
+if(stopReadingBtn) stopReadingBtn.addEventListener('click', stopReadingPlayback);
+if(repeatReadingBtn) repeatReadingBtn.addEventListener('click', ()=>{
+  readingRepeatEnabled = !readingRepeatEnabled;
+  repeatReadingBtn.setAttribute('aria-pressed', String(readingRepeatEnabled));
+  repeatReadingBtn.classList.toggle('active', readingRepeatEnabled);
+});
+if(readingBpmMinus) readingBpmMinus.addEventListener('click', ()=>adjustReadingBpm(-1));
+if(readingBpmPlus) readingBpmPlus.addEventListener('click', ()=>adjustReadingBpm(1));
+if(readingToolbarBpm) readingToolbarBpm.addEventListener('change', ()=>{
+  if(readingBpm) readingBpm.value = readingToolbarBpm.value;
+  syncReadingBpm();
+});
+if(readingFullscreen) readingFullscreen.addEventListener('click', ()=>{
+  if(!document.fullscreenElement && scorePlayerShell) scorePlayerShell.requestFullscreen();
+  else if(document.fullscreenElement) document.exitFullscreen();
+});
+if(readingStudyModeBtn) readingStudyModeBtn.addEventListener('click', ()=>setReadingViewMode('study'));
+if(readingOriginalModeBtn) readingOriginalModeBtn.addEventListener('click', ()=>setReadingViewMode('original'));
+if(toggleExecutionViewBtn) toggleExecutionViewBtn.addEventListener('click', toggleOriginalExecutionView);
+if(readingProgress){
+  let pendingSeekRatio = null;
+  const ratioFromPointer = event=>{
+    const bounds = readingProgress.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (event.clientX - bounds.left) / Math.max(1, bounds.width)));
+  };
+  const previewSeek = event=>{
+    pendingSeekRatio = ratioFromPointer(event);
+    if(readingProgressFill) readingProgressFill.style.width = `${pendingSeekRatio * 100}%`;
+  };
+  readingProgress.addEventListener('pointerdown', event=>{
+    readingProgress.setPointerCapture(event.pointerId);
+    previewSeek(event);
+  });
+  readingProgress.addEventListener('pointermove', event=>{
+    if(readingProgress.hasPointerCapture(event.pointerId)) previewSeek(event);
+  });
+  readingProgress.addEventListener('pointerup', event=>{
+    if(pendingSeekRatio !== null) seekReadingPlayback(pendingSeekRatio);
+    pendingSeekRatio = null;
+    if(readingProgress.hasPointerCapture(event.pointerId)) readingProgress.releasePointerCapture(event.pointerId);
+  });
+  readingProgress.addEventListener('keydown', event=>{
+    if(event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const current = Number(readingProgress.getAttribute('aria-valuenow') || 0) / 100;
+    seekReadingPlayback(current + (event.key === 'ArrowRight' ? 0.03 : -0.03));
+  });
+}
 if(practiceReadingExerciseBtn) practiceReadingExerciseBtn.addEventListener('click', practiceReadingExercise);
 if(importScoreBtn) importScoreBtn.addEventListener('click', importScoreFile);
 if(captureScoreBtn && scoreCameraInput) captureScoreBtn.addEventListener('click', ()=>scoreCameraInput.click());
@@ -1311,7 +1407,9 @@ if(scoreCameraInput) scoreCameraInput.addEventListener('change', ()=>{
 });
 if(saveScoreLibraryBtn) saveScoreLibraryBtn.addEventListener('click', saveCurrentReadingScore);
 if(readingLevel) readingLevel.addEventListener('change', generateReadingExercise);
-if(readingKey) readingKey.addEventListener('change', generateReadingExercise);
+if(readingKey) readingKey.addEventListener('change', ()=>{
+  if(!transposeImportedReadingScore()) generateReadingExercise();
+});
 if(readingMeter) readingMeter.addEventListener('change', generateReadingExercise);
 if(readingBpm) readingBpm.addEventListener('change', syncReadingBpm);
 if(readingPrevPageBtn) readingPrevPageBtn.addEventListener('click', ()=>setReadingScorePage(readingScorePage - 1));
@@ -1844,6 +1942,26 @@ function stop(){
   if(audioCtx) audioCtx.close();
   audioCtx = null;
   cancelAnimationFrame(raf);
+  updateNoteDisplay();
+  renderStudentTranscription();
+}
+
+async function renderStudentTranscription(){
+  if(!studentScoreContainer || !scoreEvents.length || !window.opensheetmusicdisplay) return;
+  try{
+    studentScoreContainer.innerHTML = '';
+    studentTranscriptionOsmd = new opensheetmusicdisplay.OpenSheetMusicDisplay(studentScoreContainer, {
+      autoResize:true,
+      backend:'svg',
+      drawTitle:false,
+      drawingParameters:'compacttight',
+    });
+    await studentTranscriptionOsmd.load(buildMusicXML(scoreEvents));
+    studentTranscriptionOsmd.render();
+  }catch(error){
+    console.error('Nao foi possivel desenhar a transcricao completa.', error);
+    renderScore();
+  }
 }
 
 function drawSpectrum(data){
@@ -2047,6 +2165,7 @@ function renderScore(){
   const visibleNotes = scoreEvents.slice(-12);
   if (!visibleNotes.length) {
     scoreContainer.innerHTML = '<p style="margin:0;color:#666;">Aguardando notas...</p>';
+    if(studentScoreContainer) studentScoreContainer.innerHTML = '<p style="margin:0;color:#666;">Aguardando notas...</p>';
     return;
   }
   const width = 560;
@@ -2082,7 +2201,7 @@ function renderScore(){
   timeSignature.setAttribute('y', `${staffTop + lineGap * 1.5}`);
   timeSignature.setAttribute('font-size', '18');
   timeSignature.setAttribute('fill', '#111');
-  timeSignature.textContent = '4/4';
+  timeSignature.textContent = transcriptionMeter ? transcriptionMeter.value : '4/4';
   svg.appendChild(timeSignature);
 
   const measureWidth = 160;
@@ -2176,6 +2295,10 @@ function renderScore(){
 
   scoreContainer.innerHTML = '';
   scoreContainer.appendChild(svg);
+  if(studentScoreContainer){
+    studentScoreContainer.innerHTML = '';
+    studentScoreContainer.appendChild(svg.cloneNode(true));
+  }
 }
 
 function normalizeNoteName(noteName){
@@ -2232,11 +2355,70 @@ function midiToNoteName(midi){
   return `${note}${octave}`;
 }
 
+const READING_MAJOR_KEYS = {
+  '-5':{root:'Db4', name:'Reb maior'}, '-4':{root:'Ab4', name:'Lab maior'},
+  '-3':{root:'Eb4', name:'Mib maior'}, '-2':{root:'Bb4', name:'Sib maior'},
+  '-1':{root:'F4', name:'Fa maior'}, '0':{root:'C4', name:'Do maior'},
+  '1':{root:'G4', name:'Sol maior'}, '2':{root:'D4', name:'Re maior'},
+  '3':{root:'A4', name:'La maior'}, '4':{root:'E4', name:'Mi maior'},
+  '5':{root:'B4', name:'Si maior'}, '6':{root:'F#4', name:'Fa# maior'}
+};
+
+function readingKeyFifthsForRoot(root){
+  const match = Object.entries(READING_MAJOR_KEYS).find(([, value])=>value.root === root);
+  return match ? Number(match[0]) : 0;
+}
+
+function syncReadingKeyControl(keyFifths, root){
+  if(!readingKey) return;
+  const key = READING_MAJOR_KEYS[String(keyFifths)] || null;
+  const value = root || (key ? key.root : 'C4');
+  if(Array.from(readingKey.options).some(option=>option.value === value)) readingKey.value = value;
+}
+
+function transposeReadingNote(note, semitones, preferFlats = false){
+  const midi = noteNameToMidiNumber(note);
+  if(midi === null) return note;
+  const names = preferFlats
+    ? ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B']
+    : ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const transposedMidi = Math.round(midi + semitones);
+  return `${names[((transposedMidi % 12) + 12) % 12]}${Math.floor(transposedMidi / 12) - 1}`;
+}
+
+function transposeImportedReadingScore(){
+  if(!currentReadingExercise || !readingKey || !currentReadingExercise.baseNotes) return false;
+  const baseRoot = currentReadingExercise.baseKeyRoot || 'C4';
+  const baseMidi = noteNameToMidiNumber(baseRoot);
+  const targetMidi = noteNameToMidiNumber(readingKey.value);
+  if(baseMidi === null || targetMidi === null) return false;
+  let semitones = targetMidi - baseMidi;
+  while(semitones > 6) semitones -= 12;
+  while(semitones < -6) semitones += 12;
+  currentReadingExercise.transposeSemitones = semitones;
+  const targetFifths = readingKeyFifthsForRoot(readingKey.value);
+  currentReadingExercise.notes = currentReadingExercise.baseNotes.map(note=>transposeReadingNote(note, semitones, targetFifths < 0));
+  currentReadingExercise.key = readingKey.value;
+  currentReadingExercise.keyFifths = targetFifths;
+  readingScorePage = 0;
+  renderReadingScore(currentReadingExercise);
+  renderReadingNotes(currentReadingExercise);
+  if(readingSummary) readingSummary.textContent = `${currentReadingExercise.title}: tom ${noteToSolfege(readingKey.value)} maior, ${currentReadingExercise.meter}, ${currentReadingExercise.bpm} BPM.`;
+  return true;
+}
+
 function noteToSolfege(noteName){
   const midi = noteNameToMidiNumber(noteName);
   if(midi === null) return noteName || '';
   const names = ['Do','Do#','Re','Mib','Mi','Fa','Fa#','Sol','Lab','La','Sib','Si'];
   return names[((midi % 12) + 12) % 12];
+}
+
+function noteToWrittenSolfege(noteName){
+  const match = String(noteName || '').match(/^([A-G])([#b]*)(?:-?\d+)?$/);
+  if(!match) return noteToSolfege(noteName);
+  const names = {C:'Do', D:'Re', E:'Mi', F:'Fa', G:'Sol', A:'La', B:'Si'};
+  return `${names[match[1]]}${match[2]}`;
 }
 
 function noteNameWithoutOctave(noteName){
@@ -2628,7 +2810,30 @@ function appendReadingBarLine(svg, x, staffTop, lineGap, measureNumber, finalBar
 }
 
 function readingScorePageCount(exercise = currentReadingExercise){
-  return exercise && exercise.notes ? Math.max(1, Math.ceil(exercise.notes.length / READING_SCORE_PAGE_SIZE)) : 1;
+  return readingScorePageRanges(exercise).length;
+}
+
+function readingScorePageRanges(exercise = currentReadingExercise){
+  const total = exercise && exercise.notes ? exercise.notes.length : 0;
+  if(!total) return [{start:0, end:0}];
+  const starts = [0, ...(exercise.measureStarts || [])]
+    .filter((value, index, values)=>value > 0 && value < total && values.indexOf(value) === index)
+    .sort((a, b)=>a - b);
+  if(starts[0] !== 0) starts.unshift(0);
+  const measures = starts.map((start, index)=>({start, end:starts[index + 1] || total}));
+  const pages = [];
+  let pageStart = measures[0].start;
+  let pageEnd = pageStart;
+  measures.forEach((measure)=>{
+    const proposedCount = measure.end - pageStart;
+    if(pageEnd > pageStart && proposedCount > READING_SCORE_PAGE_SIZE){
+      pages.push({start:pageStart, end:pageEnd});
+      pageStart = measure.start;
+    }
+    pageEnd = measure.end;
+  });
+  pages.push({start:pageStart, end:pageEnd});
+  return pages;
 }
 
 function updateReadingPageNavigation(exercise = currentReadingExercise){
@@ -2637,8 +2842,9 @@ function updateReadingPageNavigation(exercise = currentReadingExercise){
   if(readingPageNav) readingPageNav.hidden = pageCount <= 1;
   if(readingPageStatus){
     const totalNotes = exercise && exercise.notes ? exercise.notes.length : 0;
-    const firstNote = totalNotes ? readingScorePage * READING_SCORE_PAGE_SIZE + 1 : 0;
-    const lastNote = Math.min(totalNotes, (readingScorePage + 1) * READING_SCORE_PAGE_SIZE);
+    const range = readingScorePageRanges(exercise)[readingScorePage];
+    const firstNote = totalNotes ? range.start + 1 : 0;
+    const lastNote = range.end;
     readingPageStatus.textContent = `Pagina ${readingScorePage + 1} de ${pageCount} · notas ${firstNote}-${lastNote} de ${totalNotes}`;
   }
   if(readingPrevPageBtn) readingPrevPageBtn.disabled = readingScorePage === 0;
@@ -2660,9 +2866,98 @@ function escapeMusicXmlText(value){
   }[character]));
 }
 
+function musicXmlRhythmNotation(beats){
+  const candidates = [
+    {beats:4, type:'whole'}, {beats:3, type:'half', dot:true},
+    {beats:2, type:'half'}, {beats:1.5, type:'quarter', dot:true},
+    {beats:1, type:'quarter'}, {beats:0.75, type:'eighth', dot:true},
+    {beats:0.5, type:'eighth'}, {beats:0.375, type:'16th', dot:true},
+    {beats:0.25, type:'16th'}, {beats:0.125, type:'32nd'},
+    {beats:2 / 3, type:'quarter', triplet:true},
+    {beats:1 / 3, type:'eighth', triplet:true},
+    {beats:1 / 6, type:'16th', triplet:true},
+  ];
+  return candidates.reduce((closest, candidate)=>
+    Math.abs(candidate.beats - beats) < Math.abs(closest.beats - beats) ? candidate : closest
+  , candidates[0]);
+}
+
+function readingDurationLabel(beats){
+  const notation = musicXmlRhythmNotation(Math.max(0.125, Number(beats) || 1));
+  const names = {
+    whole:'semibreve', half:'minima', quarter:'seminima',
+    eighth:'colcheia', '16th':'semicolcheia', '32nd':'fusa'
+  };
+  let label = names[notation.type] || `${Number(beats).toFixed(2)} tempos`;
+  if(notation.dot) label += ' pontuada';
+  if(notation.triplet) label += ' em tercina';
+  return `${label} (${Number(beats).toLocaleString('pt-BR')} tempo${Number(beats) === 1 ? '' : 's'})`;
+}
+
+function sourceMusicXmlForReadingPage(exercise, pageStart, pageEnd){
+  if(!exercise.sourceMusicXml || typeof DOMParser === 'undefined') return '';
+  const documentNode = new DOMParser().parseFromString(exercise.sourceMusicXml, 'application/xml');
+  if(documentNode.querySelector('parsererror')) return '';
+  const transposeSemitones = Number(exercise.transposeSemitones) || 0;
+  if(transposeSemitones){
+    Array.from(documentNode.querySelectorAll('note > pitch')).forEach(pitch=>{
+      const stepNode = Array.from(pitch.children).find(child=>child.localName === 'step');
+      const alterNode = Array.from(pitch.children).find(child=>child.localName === 'alter');
+      const octaveNode = Array.from(pitch.children).find(child=>child.localName === 'octave');
+      if(!stepNode || !octaveNode) return;
+      const accidental = Number(alterNode ? alterNode.textContent : 0);
+      const sourceNote = `${stepNode.textContent}${accidental > 0 ? '#'.repeat(accidental) : 'b'.repeat(Math.abs(accidental))}${octaveNode.textContent}`;
+      const transposed = transposeReadingNote(sourceNote, transposeSemitones, Number(exercise.keyFifths) < 0);
+      const match = transposed.match(/^([A-G])([#b]?)(-?\d+)$/);
+      if(!match) return;
+      stepNode.textContent = match[1];
+      octaveNode.textContent = match[3];
+      if(match[2]){
+        const node = alterNode || documentNode.createElement('alter');
+        node.textContent = match[2] === '#' ? '1' : '-1';
+        if(!alterNode) pitch.insertBefore(node, octaveNode);
+      } else if(alterNode) alterNode.remove();
+    });
+    Array.from(documentNode.querySelectorAll('attributes key fifths')).forEach(node=>{
+      node.textContent = String(Number(exercise.keyFifths) || 0);
+    });
+  }
+  const parts = Array.from(documentNode.querySelectorAll('score-partwise > part'));
+  const part = parts[0];
+  if(!part) return '';
+  const measures = Array.from(part.children).filter(element=>element.localName === 'measure');
+  const measureNoteStarts = exercise.sourceMeasureNoteStarts && exercise.sourceMeasureNoteStarts.length
+    ? exercise.sourceMeasureNoteStarts
+    : [0, ...(exercise.measureStarts || [])];
+  const startMeasure = Math.max(0, measureNoteStarts.indexOf(pageStart));
+  const exactEndMeasure = measureNoteStarts.indexOf(pageEnd);
+  const endMeasure = exactEndMeasure >= 0 ? exactEndMeasure : measures.length;
+  let carriedAttributes = null;
+  for(let index = 0; index <= startMeasure; index += 1){
+    const attributes = measures[index] ? Array.from(measures[index].children).find(child=>child.localName === 'attributes') : null;
+    if(attributes) carriedAttributes = attributes.cloneNode(true);
+  }
+  measures.forEach((measure, index)=>{
+    if(index < startMeasure || index >= endMeasure) measure.remove();
+  });
+  const firstMeasure = Array.from(part.children).find(element=>element.localName === 'measure');
+  if(firstMeasure && carriedAttributes && !Array.from(firstMeasure.children).some(child=>child.localName === 'attributes')){
+    firstMeasure.insertBefore(carriedAttributes, firstMeasure.firstChild);
+  }
+  const selectedPartId = part.getAttribute('id');
+  parts.slice(1).forEach(otherPart=>otherPart.remove());
+  Array.from(documentNode.querySelectorAll('part-list > score-part')).forEach(scorePart=>{
+    if(scorePart.getAttribute('id') !== selectedPartId) scorePart.remove();
+  });
+  return new XMLSerializer().serializeToString(documentNode);
+}
+
 function readingPageMusicXml(exercise){
-  const pageStart = readingScorePage * READING_SCORE_PAGE_SIZE;
-  const pageEnd = Math.min(exercise.notes.length, pageStart + READING_SCORE_PAGE_SIZE);
+  const pageRange = readingScorePageRanges(exercise)[readingScorePage];
+  const pageStart = pageRange.start;
+  const pageEnd = pageRange.end;
+  const originalPageXml = sourceMusicXmlForReadingPage(exercise, pageStart, pageEnd);
+  if(originalPageXml) return originalPageXml;
   const notes = exercise.notes.slice(pageStart, pageEnd);
   const beats = exercise.beats.slice(pageStart, pageEnd);
   const localMeasureStarts = new Set((exercise.measureStarts || [])
@@ -2672,7 +2967,8 @@ function readingPageMusicXml(exercise){
   const meterBeats = meterMatch ? Number(meterMatch[1]) : 4;
   const meterType = meterMatch ? Number(meterMatch[2]) : 4;
   const measureCapacity = meterBeats * 4 / meterType;
-  const divisions = 8;
+  const displayBeats = beats.map(beat=>Math.max(0.125, Number(beat) || 1));
+  const divisions = 96;
   let measureNumber = 1 + (exercise.measureStarts || []).filter(index=>index <= pageStart).length;
   let measureBeats = 0;
   let xml = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0">`;
@@ -2681,14 +2977,15 @@ function readingPageMusicXml(exercise){
   const openMeasure = (includeAttributes)=>{
     xml += `<measure number="${measureNumber}">`;
     if(includeAttributes){
-      xml += `<attributes><divisions>${divisions}</divisions><key><fifths>0</fifths></key>`;
+      const keyFifths = Math.max(-7, Math.min(7, Number(exercise.keyFifths) || 0));
+      xml += `<attributes><divisions>${divisions}</divisions><key><fifths>${keyFifths}</fifths></key>`;
       xml += `<time><beats>${meterBeats}</beats><beat-type>${meterType}</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>`;
       xml += `<direction placement="above"><sound tempo="${clampBpm(exercise.bpm || 60)}"/></direction>`;
     }
   };
   openMeasure(true);
   notes.forEach((note, index)=>{
-    const durationBeats = Math.max(0.125, Number(beats[index]) || 1);
+    const durationBeats = displayBeats[index];
     const calculatedBoundary = index > 0 && !localMeasureStarts.size && measureBeats >= measureCapacity - 0.001;
     if(index > 0 && (localMeasureStarts.has(index) || calculatedBoundary)){
       xml += '</measure>';
@@ -2699,9 +2996,12 @@ function readingPageMusicXml(exercise){
     const match = String(note).match(/^([A-G])([#b]*)(-?\d+)$/);
     if(!match) return;
     const alter = (match[2].match(/#/g) || []).length - (match[2].match(/b/g) || []).length;
-    const type = durationBeats <= 0.5 ? 'eighth' : durationBeats <= 1 ? 'quarter' : durationBeats <= 2 ? 'half' : 'whole';
+    const notation = musicXmlRhythmNotation(durationBeats);
     xml += `<note><pitch><step>${match[1]}</step>${alter ? `<alter>${alter}</alter>` : ''}<octave>${match[3]}</octave></pitch>`;
-    xml += `<duration>${Math.max(1, Math.round(durationBeats * divisions))}</duration><voice>1</voice><type>${type}</type></note>`;
+    xml += `<duration>${Math.max(1, Math.round(durationBeats * divisions))}</duration><voice>1</voice><type>${notation.type}</type>`;
+    if(notation.dot) xml += '<dot/>';
+    if(notation.triplet) xml += '<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>';
+    xml += '</note>';
     measureBeats += durationBeats;
   });
   return `${xml}</measure></part></score-partwise>`;
@@ -2726,8 +3026,10 @@ function renderReadingScoreWithOsmd(exercise){
       drawTitle: false,
       drawingParameters: 'compacttight',
       followCursor: false,
+      cursorsOptions: [{type:3, color:'#e7a3a0', alpha:0.45, follow:false}],
     });
   }
+  readingOsmd.Zoom = readingScoreZoom;
   readingOsmdRenderPromise = readingOsmd.load(readingPageMusicXml(exercise)).then(()=>{
     if(token !== readingOsmdRenderToken) return;
     readingOsmd.render();
@@ -2749,8 +3051,9 @@ function renderReadingScore(exercise, forceManual = false){
   }
   readingScoreSvg.classList.remove('osmd-rendering');
   const sourceExercise = exercise;
-  const pageStart = readingScorePage * READING_SCORE_PAGE_SIZE;
-  const pageEnd = Math.min(sourceExercise.notes.length, pageStart + READING_SCORE_PAGE_SIZE);
+  const pageRange = readingScorePageRanges(sourceExercise)[readingScorePage];
+  const pageStart = pageRange.start;
+  const pageEnd = pageRange.end;
   const sourceMeasureStarts = sourceExercise.measureStarts || [];
   exercise = {
     ...sourceExercise,
@@ -2835,6 +3138,7 @@ function renderReadingScore(exercise, forceManual = false){
       elapsedMeasureBeats = 0;
     }
     const beat = normalizedBeats[index];
+    const notation = musicXmlRhythmNotation(beat);
     const slot = noteSlots[index];
     const x = cursor + slot / 2;
     const y = noteYFromScientificName(note);
@@ -2874,6 +3178,39 @@ function renderReadingScore(exercise, forceManual = false){
       stem.setAttribute('stroke', '#121c24');
       stem.setAttribute('stroke-width', '1.2');
       svg.appendChild(stem);
+
+      const flagCount = notation.type === '32nd' ? 3 : notation.type === '16th' ? 2 : notation.type === 'eighth' ? 1 : 0;
+      for(let flagIndex = 0; flagIndex < flagCount; flagIndex += 1){
+        const flag = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const stemEndY = stemDown ? y + 28 : y - 28;
+        const offsetY = flagIndex * (stemDown ? -6 : 6);
+        const direction = stemDown ? -1 : 1;
+        flag.setAttribute('d', `M ${stemX} ${stemEndY + offsetY} q ${12 * direction} ${7 * direction} ${7 * direction} ${16 * direction}`);
+        flag.setAttribute('fill', 'none');
+        flag.setAttribute('stroke', '#121c24');
+        flag.setAttribute('stroke-width', '2');
+        svg.appendChild(flag);
+      }
+    }
+
+    if(notation.dot){
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', `${x + 13}`);
+      dot.setAttribute('cy', `${y - 2}`);
+      dot.setAttribute('r', '2');
+      dot.setAttribute('fill', '#121c24');
+      svg.appendChild(dot);
+    }
+
+    if(notation.triplet){
+      const tuplet = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      tuplet.setAttribute('x', `${x - 3}`);
+      tuplet.setAttribute('y', `${staffTop - 12}`);
+      tuplet.setAttribute('font-size', '10');
+      tuplet.setAttribute('font-weight', '700');
+      tuplet.setAttribute('fill', '#121c24');
+      tuplet.textContent = '3';
+      svg.appendChild(tuplet);
     }
 
     const degree = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -2905,13 +3242,15 @@ function renderReadingScore(exercise, forceManual = false){
 function renderReadingNotes(exercise){
   if(!readingNotes || !exercise) return;
   readingNotes.innerHTML = '';
-  const pageStart = readingScorePage * READING_SCORE_PAGE_SIZE;
-  const pageEnd = Math.min(exercise.notes.length, pageStart + READING_SCORE_PAGE_SIZE);
+  const pageRange = readingScorePageRanges(exercise)[readingScorePage];
+  const pageStart = pageRange.start;
+  const pageEnd = pageRange.end;
   exercise.notes.slice(pageStart, pageEnd).forEach((note, localIndex)=>{
     const index = pageStart + localIndex;
     const chip = document.createElement('span');
-    chip.textContent = `${exercise.degrees[index]}: ${noteToSolfege(note)} (${note})`;
-    chip.title = exercise.functions[index] || '';
+    const durationLabel = readingDurationLabel(exercise.beats[index]);
+    chip.textContent = `${exercise.degrees[index]}: ${noteToWrittenSolfege(note)} (${note}) · ${durationLabel}`;
+    chip.title = [exercise.functions[index] || '', `Duracao: ${durationLabel}`].filter(Boolean).join(' — ');
     chip.dataset.scoreNoteIndex = String(index);
     readingNotes.appendChild(chip);
   });
@@ -2933,6 +3272,7 @@ function generateReadingExercise(){
 function syncReadingBpm(){
   const bpm = clampBpm(readingBpm ? readingBpm.value || 60 : 60);
   if(readingBpm) readingBpm.value = bpm;
+  if(readingToolbarBpm) readingToolbarBpm.value = bpm;
   if(currentReadingExercise){
     currentReadingExercise.bpm = bpm;
     if(readingSummary){
@@ -2940,6 +3280,126 @@ function syncReadingBpm(){
     }
   }
   return bpm;
+}
+
+function adjustReadingBpm(change){
+  const current = Number(readingToolbarBpm ? readingToolbarBpm.value : (readingBpm ? readingBpm.value : 60)) || 60;
+  if(readingBpm) readingBpm.value = clampBpm(current + change);
+  syncReadingBpm();
+}
+
+function adjustReadingZoom(change){
+  readingScoreZoom = Math.max(0.6, Math.min(1.8, Math.round((readingScoreZoom + change) * 10) / 10));
+  if(readingOsmd){
+    readingOsmd.Zoom = readingScoreZoom;
+    readingOsmd.render();
+  } else if(readingScoreSvg){
+    const svg = readingScoreSvg.querySelector('svg');
+    if(svg) svg.style.transform = `scale(${readingScoreZoom})`;
+  }
+}
+
+function formatReadingTime(seconds){
+  const safeSeconds = Math.max(0, Math.round(seconds || 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = safeSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+}
+
+function updateReadingPlaybackProgress(elapsedSeconds, totalSeconds){
+  const progress = totalSeconds > 0 ? Math.max(0, Math.min(100, elapsedSeconds / totalSeconds * 100)) : 0;
+  if(readingProgressFill) readingProgressFill.style.width = `${progress}%`;
+  if(readingProgress) readingProgress.setAttribute('aria-valuenow', String(Math.round(progress)));
+  if(readingPlaybackTime) readingPlaybackTime.textContent = `${formatReadingTime(elapsedSeconds)} / ${formatReadingTime(totalSeconds)}`;
+}
+
+function syncReadingMeterControl(meter){
+  if(!readingMeter || !meter) return;
+  let option = Array.from(readingMeter.options).find(item=>item.value === meter);
+  if(!option){
+    option = document.createElement('option');
+    option.value = meter;
+    option.textContent = meter;
+    readingMeter.appendChild(option);
+  }
+  readingMeter.value = meter;
+}
+
+function syncOriginalScoreView(exercise = currentReadingExercise){
+  const available = Boolean(exercise && exercise.originalSourceUrl);
+  if(readingOriginalModeBtn) readingOriginalModeBtn.disabled = !available;
+  if(!available) setReadingViewMode('study');
+}
+
+function setReadingViewMode(mode){
+  const showOriginal = mode === 'original' && currentReadingExercise && currentReadingExercise.originalSourceUrl;
+  const scoreSurface = readingScoreSvg ? readingScoreSvg.closest('.score-page-surface') : null;
+  if(scoreSurface) scoreSurface.hidden = false;
+  if(scorePlayerShell) scorePlayerShell.classList.toggle('original-comparison', showOriginal);
+  if(readingOriginalView){
+    readingOriginalView.hidden = !showOriginal;
+    if(showOriginal){
+      readingOriginalView.innerHTML = '';
+      const guide = document.createElement('div');
+      guide.className = 'original-playback-guide';
+      guide.innerHTML = '<strong id="originalGuideNote">Pronto para executar</strong><div class="original-guide-track"><div id="originalGuideFill" class="original-guide-fill"></div></div><span id="originalGuidePosition" class="original-guide-position">0 / 0</span>';
+      const isImage = String(currentReadingExercise.originalSourceType || '').startsWith('image/');
+      const viewer = document.createElement(isImage ? 'img' : 'iframe');
+      viewer.src = currentReadingExercise.originalSourceUrl;
+      viewer.title = `Partitura original: ${currentReadingExercise.title}`;
+      const caption = document.createElement('strong');
+      caption.className = 'score-view-caption';
+      caption.textContent = 'PDF original';
+      readingOriginalView.append(caption, guide, viewer);
+    }
+  }
+  if(readingStudyModeBtn) readingStudyModeBtn.classList.toggle('active', !showOriginal);
+  if(readingOriginalModeBtn) readingOriginalModeBtn.classList.toggle('active', showOriginal);
+  if(toggleExecutionViewBtn) toggleExecutionViewBtn.hidden = !showOriginal;
+  if(!showOriginal && scorePlayerShell) scorePlayerShell.classList.remove('execution-hidden');
+  syncExecutionViewButton();
+  if(readingOsmd){
+    window.requestAnimationFrame(()=>{
+      try{ readingOsmd.render(); }catch(error){}
+    });
+  }
+}
+
+function syncExecutionViewButton(){
+  if(!toggleExecutionViewBtn || !scorePlayerShell) return;
+  const hidden = scorePlayerShell.classList.contains('execution-hidden');
+  toggleExecutionViewBtn.textContent = hidden ? 'Mostrar execucao' : 'Ocultar execucao';
+  toggleExecutionViewBtn.setAttribute('aria-pressed', String(hidden));
+}
+
+function toggleOriginalExecutionView(){
+  if(!scorePlayerShell || !scorePlayerShell.classList.contains('original-comparison')) return;
+  scorePlayerShell.classList.toggle('execution-hidden');
+  syncExecutionViewButton();
+  if(readingOsmd && !scorePlayerShell.classList.contains('execution-hidden')){
+    window.requestAnimationFrame(()=>{
+      try{ readingOsmd.render(); }catch(error){}
+    });
+  }
+}
+
+function updateOriginalPlaybackGuide(noteIndex = -1, elapsedSeconds = 0, totalSeconds = 0){
+  if(!readingOriginalView || !currentReadingExercise) return;
+  const noteElement = readingOriginalView.querySelector('#originalGuideNote');
+  const fillElement = readingOriginalView.querySelector('#originalGuideFill');
+  const positionElement = readingOriginalView.querySelector('#originalGuidePosition');
+  const totalNotes = currentReadingExercise.notes.length;
+  const active = noteIndex >= 0 && noteIndex < totalNotes;
+  const completed = totalSeconds > 0 && elapsedSeconds >= totalSeconds - 0.05;
+  if(noteElement){
+    const note = active ? currentReadingExercise.notes[noteIndex] : '';
+    noteElement.textContent = active
+      ? `Nota ${noteIndex + 1}: ${noteToWrittenSolfege(note)} (${note})`
+      : (completed ? 'Execucao concluida' : 'Pronto para executar');
+  }
+  const ratio = totalSeconds > 0 ? Math.max(0, Math.min(1, elapsedSeconds / totalSeconds)) : 0;
+  if(fillElement) fillElement.style.width = `${ratio * 100}%`;
+  if(positionElement) positionElement.textContent = `${active ? noteIndex + 1 : (completed ? totalNotes : 0)} / ${totalNotes} · ${formatReadingTime(elapsedSeconds)}`;
 }
 
 async function importScoreFile(selectedFile){
@@ -2971,12 +3431,21 @@ async function importScoreFile(selectedFile){
     const degrees = data.notes.map((_, index)=>String(index + 1));
     currentReadingExercise = {
       title: data.title || file.name,
-      key: data.notes[0],
+      key: (READING_MAJOR_KEYS[String(Number(data.key_fifths) || 0)] || READING_MAJOR_KEYS['0']).root,
       meter: data.meter || '4/4',
       bpm: clampBpm(data.bpm || 60),
       notes: data.notes,
       beats: data.beats,
       measureStarts: data.measure_starts || [],
+      sourceMeasureNoteStarts: data.source_measure_note_starts || [],
+      sourceMusicXml: data.source_musicxml || '',
+      keyFifths: Number(data.key_fifths) || 0,
+      baseKeyFifths: Number(data.key_fifths) || 0,
+      baseKeyRoot: (READING_MAJOR_KEYS[String(Number(data.key_fifths) || 0)] || READING_MAJOR_KEYS['0']).root,
+      baseNotes: data.notes.slice(),
+      transposeSemitones: 0,
+      originalSourceUrl: data.original_source_url || '',
+      originalSourceType: data.original_source_type || '',
       degrees,
       functions: data.notes.map(()=> 'nota reconhecida da partitura'),
       pitchTheory: 'Confira as notas reconhecidas antes de tocar.',
@@ -2985,6 +3454,11 @@ async function importScoreFile(selectedFile){
     };
     readingScorePage = 0;
     if(readingBpm) readingBpm.value = currentReadingExercise.bpm;
+    if(readingToolbarBpm) readingToolbarBpm.value = currentReadingExercise.bpm;
+    syncReadingMeterControl(currentReadingExercise.meter);
+    syncReadingKeyControl(currentReadingExercise.keyFifths, currentReadingExercise.baseKeyRoot);
+    syncOriginalScoreView(currentReadingExercise);
+    setReadingViewMode('study');
     if(readingSummary) readingSummary.textContent = `${currentReadingExercise.title}: ${data.notes.length} notas reconhecidas, ${currentReadingExercise.meter}, ${currentReadingExercise.bpm} BPM.`;
     if(readingPitchTheory) readingPitchTheory.textContent = currentReadingExercise.pitchTheory;
     if(readingRhythmTheory) readingRhythmTheory.textContent = currentReadingExercise.rhythmTheory;
@@ -3010,6 +3484,15 @@ function readingExerciseForStorage(exercise){
     notes: exercise.notes,
     beats: exercise.beats,
     measureStarts: exercise.measureStarts || [],
+    sourceMeasureNoteStarts: exercise.sourceMeasureNoteStarts || [],
+    sourceMusicXml: exercise.sourceMusicXml || '',
+    keyFifths: Number(exercise.keyFifths) || 0,
+    baseKeyFifths: Number(exercise.baseKeyFifths ?? exercise.keyFifths) || 0,
+    baseKeyRoot: exercise.baseKeyRoot || exercise.key || 'C4',
+    baseNotes: exercise.baseNotes || exercise.notes,
+    transposeSemitones: Number(exercise.transposeSemitones) || 0,
+    originalSourceUrl: exercise.originalSourceUrl || '',
+    originalSourceType: exercise.originalSourceType || '',
     degrees: exercise.degrees || exercise.notes.map((_, index)=>String(index + 1)),
     functions: exercise.functions || exercise.notes.map(()=>''),
     pitchTheory: exercise.pitchTheory || 'Partitura salva para estudo.',
@@ -3022,9 +3505,10 @@ function loadReadingExercise(scoreData, title){
   currentReadingExercise = readingExerciseForStorage({...scoreData, title: title || scoreData.title});
   readingScorePage = 0;
   if(readingBpm) readingBpm.value = clampBpm(currentReadingExercise.bpm || 60);
-  if(readingMeter && Array.from(readingMeter.options).some(option=>option.value === currentReadingExercise.meter)){
-    readingMeter.value = currentReadingExercise.meter;
-  }
+  syncReadingMeterControl(currentReadingExercise.meter);
+  syncReadingKeyControl(currentReadingExercise.keyFifths, currentReadingExercise.key);
+  syncOriginalScoreView(currentReadingExercise);
+  setReadingViewMode('study');
   if(savedScoreTitle) savedScoreTitle.value = currentReadingExercise.title || '';
   if(readingPitchTheory) readingPitchTheory.textContent = currentReadingExercise.pitchTheory;
   if(readingRhythmTheory) readingRhythmTheory.textContent = currentReadingExercise.rhythmTheory;
@@ -3115,24 +3599,43 @@ async function loadSavedScores(){
   }
 }
 
-async function playReadingExercise(startIndex = 0, endIndex = null){
+async function playReadingExercise(startIndex = 0, endIndex = null, timelineStartIndex = startIndex){
   if(readingPlaybackRunning) return;
   if(!currentReadingExercise) generateReadingExercise();
   if(!currentReadingExercise) return;
   const finalIndex = endIndex === null ? currentReadingExercise.notes.length : Math.min(endIndex, currentReadingExercise.notes.length);
   const sequence = currentReadingExercise.notes.slice(startIndex, finalIndex);
   const durations = currentReadingExercise.beats.slice(startIndex, finalIndex);
+  const timelineDurations = currentReadingExercise.beats.slice(timelineStartIndex, finalIndex);
   if(!sequence.length) return;
+  const sessionId = ++readingPlaybackSessionId;
+  readingActiveStartIndex = startIndex;
+  readingActiveEndIndex = finalIndex;
+  readingTimelineStartIndex = timelineStartIndex;
   currentReadingExercise.bpm = syncReadingBpm();
+  const secondsPerBeat = 60 / currentReadingExercise.bpm;
+  const cumulativeBeats = [0];
+  durations.forEach(duration=>cumulativeBeats.push(cumulativeBeats[cumulativeBeats.length - 1] + (Number(duration) || 1)));
+  const precedingBeats = currentReadingExercise.beats.slice(timelineStartIndex, startIndex)
+    .reduce((sum, duration)=>sum + (Number(duration) || 1), 0);
+  const totalTimelineBeats = timelineDurations.reduce((sum, duration)=>sum + (Number(duration) || 1), 0);
+  const totalSeconds = totalTimelineBeats * secondsPerBeat;
+  updateReadingPlaybackProgress(precedingBeats * secondsPerBeat, totalSeconds);
   const longScore = currentReadingExercise.notes.length > 80;
   let previousIndex = -1;
   readingPlaybackRunning = true;
   readingPlaybackPaused = false;
-  if(pauseReadingBtn){ pauseReadingBtn.disabled = false; pauseReadingBtn.textContent = 'Pausar'; }
+  if(pauseReadingBtn){ pauseReadingBtn.disabled = false; pauseReadingBtn.textContent = '❚❚ Pausar'; }
+  if(stopReadingBtn) stopReadingBtn.disabled = false;
   if(playReadingExerciseBtn) playReadingExerciseBtn.disabled = true;
   if(playReadingPageBtn) playReadingPageBtn.disabled = true;
   await playReferenceSequence(sequence, currentReadingExercise.bpm, (sequenceIndex)=>{
     const index = sequenceIndex >= 0 ? startIndex + sequenceIndex : -1;
+    const elapsedSeconds = sequenceIndex >= 0
+      ? (precedingBeats + cumulativeBeats[sequenceIndex]) * secondsPerBeat
+      : totalSeconds;
+    updateReadingPlaybackProgress(elapsedSeconds, totalSeconds);
+    updateOriginalPlaybackGuide(index, elapsedSeconds, totalSeconds);
     if(previousIndex >= 0){
       const previousChip = readingNotes ? readingNotes.querySelector(`[data-score-note-index="${previousIndex}"]`) : null;
       const previousNote = readingScoreSvg ? readingScoreSvg.querySelector(`[data-score-note-index="${previousIndex}"]`) : null;
@@ -3140,7 +3643,8 @@ async function playReadingExercise(startIndex = 0, endIndex = null){
       if(previousNote) previousNote.classList.remove('reference-playing');
     }
     if(index >= 0){
-      const targetPage = Math.floor(index / READING_SCORE_PAGE_SIZE);
+      const pageRanges = readingScorePageRanges(currentReadingExercise);
+      const targetPage = Math.max(0, pageRanges.findIndex(range=>index >= range.start && index < range.end));
       if(targetPage !== readingScorePage){
         readingScorePage = targetPage;
         renderReadingScore(currentReadingExercise);
@@ -3149,7 +3653,7 @@ async function playReadingExercise(startIndex = 0, endIndex = null){
       }
       if(readingOsmd && readingOsmdRenderPromise){
         const cursorPage = targetPage;
-        const localIndex = index % READING_SCORE_PAGE_SIZE;
+        const localIndex = index - pageRanges[targetPage].start;
         readingOsmdRenderPromise.then(()=>{
           if(readingScorePage === cursorPage) positionReadingOsmdCursor(localIndex);
         });
@@ -3170,18 +3674,56 @@ async function playReadingExercise(startIndex = 0, endIndex = null){
     }
     previousIndex = index;
   }, durations);
+  if(sessionId !== readingPlaybackSessionId) return;
   readingPlaybackRunning = false;
   readingPlaybackPaused = false;
-  if(pauseReadingBtn){ pauseReadingBtn.disabled = true; pauseReadingBtn.textContent = 'Pausar'; }
+  if(pauseReadingBtn){ pauseReadingBtn.disabled = true; pauseReadingBtn.textContent = '❚❚ Pausar'; }
+  if(stopReadingBtn) stopReadingBtn.disabled = true;
   if(playReadingExerciseBtn) playReadingExerciseBtn.disabled = false;
   if(playReadingPageBtn) playReadingPageBtn.disabled = false;
+  if(readingRepeatEnabled) window.setTimeout(()=>playReadingExercise(timelineStartIndex, finalIndex, timelineStartIndex), 120);
+}
+
+async function seekReadingPlayback(rawRatio){
+  if(!currentReadingExercise) generateReadingExercise();
+  if(!currentReadingExercise || !currentReadingExercise.notes.length) return;
+  const ratio = Math.max(0, Math.min(0.9999, Number(rawRatio) || 0));
+  const timelineStart = readingPlaybackRunning ? readingTimelineStartIndex : 0;
+  const timelineEnd = readingPlaybackRunning ? readingActiveEndIndex : currentReadingExercise.notes.length;
+  const timelineDurations = currentReadingExercise.beats.slice(timelineStart, timelineEnd);
+  const totalBeats = timelineDurations.reduce((sum, duration)=>sum + (Number(duration) || 1), 0);
+  const targetBeat = totalBeats * ratio;
+  let accumulated = 0;
+  let targetIndex = timelineStart;
+  for(let index = 0; index < timelineDurations.length; index += 1){
+    const duration = Number(timelineDurations[index]) || 1;
+    if(accumulated + duration > targetBeat){ targetIndex = timelineStart + index; break; }
+    accumulated += duration;
+    targetIndex = Math.min(timelineEnd - 1, timelineStart + index + 1);
+  }
+  readingPlaybackSessionId += 1;
+  referencePlaybackId += 1;
+  if(activeReferencePlaybackBus && audioCtx){
+    activeReferencePlaybackBus.gain.cancelScheduledValues(audioCtx.currentTime);
+    activeReferencePlaybackBus.gain.setValueAtTime(0, audioCtx.currentTime);
+    try{ activeReferencePlaybackBus.disconnect(); }catch(error){}
+    activeReferencePlaybackBus = null;
+  }
+  if(readingPlaybackPaused && audioCtx) await audioCtx.resume();
+  readingPlaybackRunning = false;
+  readingPlaybackPaused = false;
+  const targetPage = readingScorePageRanges(currentReadingExercise)
+    .findIndex(range=>targetIndex >= range.start && targetIndex < range.end);
+  if(targetPage >= 0 && targetPage !== readingScorePage) setReadingScorePage(targetPage);
+  playReadingExercise(targetIndex, timelineEnd, timelineStart);
 }
 
 function playCurrentReadingPage(){
   if(!currentReadingExercise) generateReadingExercise();
   if(!currentReadingExercise) return;
-  const startIndex = readingScorePage * READING_SCORE_PAGE_SIZE;
-  const endIndex = Math.min(currentReadingExercise.notes.length, startIndex + READING_SCORE_PAGE_SIZE);
+  const pageRange = readingScorePageRanges(currentReadingExercise)[readingScorePage];
+  const startIndex = pageRange.start;
+  const endIndex = pageRange.end;
   playReadingExercise(startIndex, endIndex);
 }
 
@@ -3190,12 +3732,41 @@ async function toggleReadingPlaybackPause(){
   if(!readingPlaybackPaused){
     await audioCtx.suspend();
     readingPlaybackPaused = true;
-    if(pauseReadingBtn) pauseReadingBtn.textContent = 'Retomar';
+    if(pauseReadingBtn) pauseReadingBtn.textContent = '▶ Retomar';
   } else {
     await audioCtx.resume();
     readingPlaybackPaused = false;
-    if(pauseReadingBtn) pauseReadingBtn.textContent = 'Pausar';
+    if(pauseReadingBtn) pauseReadingBtn.textContent = '❚❚ Pausar';
   }
+}
+
+async function stopReadingPlayback(){
+  readingPlaybackSessionId += 1;
+  referencePlaybackId += 1;
+  if(activeReferencePlaybackBus && audioCtx){
+    activeReferencePlaybackBus.gain.cancelScheduledValues(audioCtx.currentTime);
+    activeReferencePlaybackBus.gain.setValueAtTime(0, audioCtx.currentTime);
+    try{ activeReferencePlaybackBus.disconnect(); }catch(error){}
+    activeReferencePlaybackBus = null;
+  }
+  if(audioCtx && audioCtx.state === 'suspended'){
+    try{ await audioCtx.resume(); }catch(error){}
+  }
+  readingPlaybackRunning = false;
+  readingPlaybackPaused = false;
+  readingRepeatEnabled = false;
+  document.querySelectorAll('.reference-playing').forEach(element=>element.classList.remove('reference-playing'));
+  if(readingOsmd && readingOsmd.cursor) readingOsmd.cursor.hide();
+  if(pauseReadingBtn){ pauseReadingBtn.disabled = true; pauseReadingBtn.textContent = '❚❚ Pausar'; }
+  if(stopReadingBtn) stopReadingBtn.disabled = true;
+  if(playReadingExerciseBtn) playReadingExerciseBtn.disabled = false;
+  if(playReadingPageBtn) playReadingPageBtn.disabled = false;
+  if(repeatReadingBtn){
+    repeatReadingBtn.setAttribute('aria-pressed', 'false');
+    repeatReadingBtn.classList.remove('active');
+  }
+  updateReadingPlaybackProgress(0, 0);
+  updateOriginalPlaybackGuide(-1, 0, 0);
 }
 
 function practiceReadingExercise(){
@@ -3209,7 +3780,7 @@ function practiceReadingExercise(){
     target: currentReadingExercise.notes[0],
     bpm: currentReadingExercise.bpm,
     sequence: currentReadingExercise.notes,
-    labels: currentReadingExercise.notes.map((note, index)=>`${currentReadingExercise.degrees[index]} - ${noteToSolfege(note)}`),
+    labels: currentReadingExercise.notes.map((note, index)=>`${currentReadingExercise.degrees[index]} - ${noteToWrittenSolfege(note)}`),
     help: 'Leia a pauta, ouca a referencia e toque a sequencia respeitando pulso, altura e resolucao.'
   };
   const optionExists = beginnerExercise && Array.from(beginnerExercise.options).some(opt => opt.value === 'sheet_reading');
@@ -3471,7 +4042,8 @@ function getInstrumentLabel(){
 }
 
 function quantizeDuration(durationMs){
-  const quarter = 500;
+  const bpm = clampBpm(transcriptionBpm ? transcriptionBpm.value || 60 : 60);
+  const quarter = 60000 / bpm;
   const candidates = [
     {label:'semicolcheia', factor:0.25},
     {label:'colcheia', factor:0.5},
@@ -3502,11 +4074,11 @@ function playScoreSequence(){
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const startTime = audioCtx.currentTime + 0.2;
   scoreEvents.forEach((event, index) => {
-    const nextTime = index < scoreEvents.length - 1 ? scoreEvents[index + 1].time : event.time + 700;
-    const durationMs = event.duration > 0 ? event.duration : Math.max(120, nextTime - event.time);
+    const nextTime = index < scoreEvents.length - 1 ? scoreEvents[index + 1].start : event.start + 700;
+    const durationMs = event.duration > 0 ? event.duration : Math.max(120, nextTime - event.start);
     const quant = quantizeDuration(durationMs);
     const duration = Math.max(0.25, Math.min(1.2, quant.ms / 1000));
-    const frequency = frequencyFromNoteName(event.note);
+    const frequency = noteNameToFrequency(event.note);
     if (!frequency) return;
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
@@ -3514,7 +4086,7 @@ function playScoreSequence(){
     osc.frequency.value = frequency;
     osc.connect(gain);
     gain.connect(audioCtx.destination);
-    const noteStart = startTime + event.time / 1000;
+    const noteStart = startTime + event.start / 1000;
     gain.gain.setValueAtTime(0, noteStart);
     gain.gain.linearRampToValueAtTime(0.25, noteStart + 0.02);
     gain.gain.setValueAtTime(0.25, noteStart + duration - 0.05);
@@ -3542,6 +4114,10 @@ function buildMusicXML(events){
 
   // helpers
   function noteToPitch(note){
+    const scientific = String(note || '').match(/^([A-G])([#b]?)(-?\d+)$/);
+    if(scientific){
+      return {step:scientific[1], alter:scientific[2] === '#' ? 1 : scientific[2] === 'b' ? -1 : 0, octave:Number(scientific[3])};
+    }
     const n = normalizeNoteName(note);
     const m = n.match(/^([a-z#]+)(-?\d+)$/);
     if(!m) return null;
@@ -3552,15 +4128,17 @@ function buildMusicXML(events){
   }
   function typeFromFactor(f){ if(f===0.25) return '16th'; if(f===0.5) return 'eighth'; if(f===1) return 'quarter'; if(f===2) return 'half'; return 'whole'; }
 
-  // iterate and fill measures (4/4)
-  const measureDivs = quarterLen * 4;
+  const meterMatch = String(transcriptionMeter ? transcriptionMeter.value : '4/4').match(/^(\d+)\/(\d+)$/);
+  const meterBeats = meterMatch ? Number(meterMatch[1]) : 4;
+  const meterBeatType = meterMatch ? Number(meterMatch[2]) : 4;
+  const measureDivs = Math.round(quarterLen * meterBeats * 4 / meterBeatType);
   let measureIndex = 1;
   let measurePos = 0; // in divisions
 
   function openMeasure(){
     out += `<measure number="${measureIndex}">\n`;
     if(measurePos===0){
-      out += `<attributes>\n<divisions>${divisions}</divisions>\n<key><fifths>0</fifths></key>\n<time><beats>4</beats><beat-type>4</beat-type></time>\n<clef><sign>G</sign><line>2</line></clef>\n</attributes>\n`;
+      out += `<attributes>\n<divisions>${divisions}</divisions>\n<key><fifths>0</fifths></key>\n<time><beats>${meterBeats}</beats><beat-type>${meterBeatType}</beat-type></time>\n<clef><sign>G</sign><line>2</line></clef>\n</attributes>\n`;
     }
   }
 
@@ -3751,6 +4329,8 @@ function updateNoteDisplay(){
   renderScore();
   if (playScoreBtn) playScoreBtn.disabled = scoreEvents.length === 0;
   if (clearScoreBtn) clearScoreBtn.disabled = scoreEvents.length === 0;
+  if (playTranscriptionBtn) playTranscriptionBtn.disabled = scoreEvents.length === 0;
+  if (clearTranscriptionBtn) clearTranscriptionBtn.disabled = scoreEvents.length === 0;
   if (noteTimeline) {
     noteTimeline.innerHTML = '';
     if (noteHistory.length === 0) {
@@ -3813,6 +4393,27 @@ function autoCorrelate(buf, sampleRate){
   if(frequency > MAX_PITCH_HZ || frequency < MIN_PITCH_HZ) return null;
   return frequency;
 }
+
+if(startTranscriptionBtn) startTranscriptionBtn.addEventListener('click', ()=>{
+  if(transcriptionStatus) transcriptionStatus.textContent = 'Ouvindo o estudante. Toque uma nota por vez e mantenha o pulso.';
+  start();
+  startTranscriptionBtn.disabled = true;
+  if(stopTranscriptionBtn) stopTranscriptionBtn.disabled = false;
+});
+if(stopTranscriptionBtn) stopTranscriptionBtn.addEventListener('click', ()=>{
+  stop();
+  stopTranscriptionBtn.disabled = true;
+  if(startTranscriptionBtn) startTranscriptionBtn.disabled = false;
+  if(transcriptionStatus) transcriptionStatus.textContent = scoreEvents.length
+    ? `${scoreEvents.length} notas escritas conforme ${transcriptionBpm ? transcriptionBpm.value : 60} BPM.`
+    : 'Nenhuma nota foi reconhecida. Calibre o microfone e tente novamente.';
+});
+if(playTranscriptionBtn) playTranscriptionBtn.addEventListener('click', playScoreSequence);
+if(clearTranscriptionBtn) clearTranscriptionBtn.addEventListener('click', ()=>{
+  clearScore();
+  if(studentScoreContainer) studentScoreContainer.innerHTML = '<p>A pauta aparecera aqui.</p>';
+  if(transcriptionStatus) transcriptionStatus.textContent = 'Transcricao limpa.';
+});
 
 // YIN pitch detection algorithm
 function yinPitch(buffer, sampleRate){

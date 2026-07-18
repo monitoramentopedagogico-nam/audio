@@ -16,6 +16,7 @@ urlpatterns = [
     path("audio/", views.audio, name="audio"),
     path("api/fetch_chord_sheet/", views.fetch_chord_sheet, name="fetch_chord_sheet"),
     path("api/import_score/", views.import_score, name="import_score"),
+    path("api/score_source/<int:source_id>/", views.score_source, name="score_source"),
     path("api/saved_scores/", views.saved_scores, name="saved_scores"),
     path("api/upload_audio/", views.upload_audio, name="upload_audio"),
     path("api/upload_sample/", views.upload_sample, name="upload_sample"),

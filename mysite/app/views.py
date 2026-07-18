@@ -1,7 +1,8 @@
 from django.shortcuts import render
-from django.http import JsonResponse, HttpResponseBadRequest
+from django.http import JsonResponse, HttpResponseBadRequest, FileResponse, Http404
 from django.views.decorators.http import require_POST, require_http_methods
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
 from django.core.cache import cache
@@ -28,6 +29,7 @@ MAX_AUDIO_BYTES = 20 * 1024 * 1024
 MAX_SYNC_SESSIONS = 100
 MAX_SYNC_SAMPLES = 20
 MAX_SCORE_BYTES = 15 * 1024 * 1024
+MAX_SCORE_NOTES = 2000
 SCORE_IMPORT_LIMIT = 5
 SCORE_IMPORT_WINDOW_SECONDS = 300
 ALLOWED_AUDIO_TYPES = {
@@ -92,13 +94,16 @@ def _parse_musicxml_score(xml_bytes):
     divisions = 1
     bpm = 60
     meter = '4/4'
+    key_fifths = 0
     notes = []
     beats = []
     measure_starts = []
+    source_measure_note_starts = []
     selected_voice = None
 
     for measure in part.findall('./measure'):
         notes_before_measure = len(notes)
+        source_measure_note_starts.append(notes_before_measure)
         divisions_text = measure.findtext('./attributes/divisions')
         if divisions_text:
             divisions = max(1, int(float(divisions_text)))
@@ -106,6 +111,9 @@ def _parse_musicxml_score(xml_bytes):
         beat_type = measure.findtext('./attributes/time/beat-type')
         if beat_count and beat_type:
             meter = f'{beat_count}/{beat_type}'
+        fifths_text = measure.findtext('./attributes/key/fifths')
+        if fifths_text is not None:
+            key_fifths = max(-7, min(7, int(float(fifths_text))))
         sound = measure.find('./direction/sound[@tempo]')
         if sound is not None:
             bpm = max(30, min(240, round(float(sound.attrib['tempo']))))
@@ -127,22 +135,26 @@ def _parse_musicxml_score(xml_bytes):
             duration = max(0.125, float(note.findtext('./duration') or divisions) / divisions)
             notes.append(f'{step.upper()}{accidental}{octave}')
             beats.append(duration)
-            if len(notes) >= 256:
+            if len(notes) >= MAX_SCORE_NOTES:
                 break
         if len(notes) > notes_before_measure and notes_before_measure > 0:
             measure_starts.append(notes_before_measure)
-        if len(notes) >= 256:
+        if len(notes) >= MAX_SCORE_NOTES:
             break
 
     if not notes:
         raise ValueError('No playable melody was recognized in the first part.')
+    normalized_musicxml = ElementTree.tostring(root, encoding='unicode')
     return {
         'title': title,
         'notes': notes,
         'beats': beats,
         'bpm': bpm,
         'meter': meter,
+        'key_fifths': key_fifths,
         'measure_starts': measure_starts,
+        'source_measure_note_starts': source_measure_note_starts,
+        'source_musicxml': normalized_musicxml,
     }
 
 
@@ -367,12 +379,40 @@ def import_score(request):
             needs_omr = extension == '.pdf' or extension in image_extensions
             musicxml_path = _convert_score_with_audiveris(omr_input, temp_dir) if needs_omr else input_path
             parsed = _parse_musicxml_score(_musicxml_bytes(musicxml_path))
+            source = None
+            if extension in {'.pdf', '.jpg', '.jpeg', '.png'}:
+                from .models import ScoreSource
+                source = ScoreSource.objects.create(
+                    user=request.user,
+                    original_name=Path(score.name).name[:255],
+                    content_type=(getattr(score, 'content_type', '') or 'application/octet-stream')[:100],
+                )
+                source.file.save(Path(score.name).name, ContentFile(input_path.read_bytes()), save=True)
     except (ValueError, ElementTree.ParseError, zipfile.BadZipFile) as exc:
         return JsonResponse({'status': 'error', 'message': str(exc)}, status=422)
     except RuntimeError as exc:
         return JsonResponse({'status': 'error', 'message': str(exc)}, status=503)
 
-    return JsonResponse({'status': 'ok', **parsed})
+    source_data = {
+        'original_source_url': f'/api/score_source/{source.pk}/' if source else '',
+        'original_source_type': source.content_type if source else '',
+    }
+    return JsonResponse({'status': 'ok', **parsed, **source_data})
+
+
+@login_required
+@xframe_options_sameorigin
+def score_source(request, source_id):
+    from .models import ScoreSource
+    try:
+        source = ScoreSource.objects.get(pk=source_id, user=request.user)
+    except ScoreSource.DoesNotExist as exc:
+        raise Http404('Partitura original nao encontrada.') from exc
+    response = FileResponse(source.file.open('rb'), content_type=source.content_type or 'application/octet-stream')
+    response['Content-Disposition'] = f'inline; filename="{Path(source.original_name).name}"'
+    response['X-Content-Type-Options'] = 'nosniff'
+    response['Content-Security-Policy'] = "default-src 'self'; frame-ancestors 'self'; object-src 'self'"
+    return response
 
 
 @login_required
@@ -402,7 +442,7 @@ def saved_scores(request):
     score_data = payload.get('score_data')
     notes = score_data.get('notes') if isinstance(score_data, dict) else None
     beats = score_data.get('beats') if isinstance(score_data, dict) else None
-    if not title or not isinstance(notes, list) or not notes or len(notes) > 256:
+    if not title or not isinstance(notes, list) or not notes or len(notes) > MAX_SCORE_NOTES:
         return JsonResponse({'status': 'error', 'message': 'Partitura invalida.'}, status=400)
     if not isinstance(beats, list) or len(beats) != len(notes):
         return JsonResponse({'status': 'error', 'message': 'Duracoes da partitura invalidas.'}, status=400)

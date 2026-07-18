@@ -2,12 +2,29 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}mysite{% endblock %}</title>
+  <style>
+    *{box-sizing:border-box}
+    :root{--bg:#f3f0e8;--surface:#fffdf8;--line:#d8ccbb;--line-strong:#b7a68e;--text:#24313a;--muted:#6f7b82;--accent:#2d7a62;--accent-soft:#e5f3ea;--danger:#b73a32}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif}
+    nav{display:flex;gap:8px;align-items:center;padding:12px clamp(12px,4vw,34px);background:var(--surface);border-bottom:1px solid var(--line)}
+    nav a{color:var(--text);text-decoration:none;padding:8px 10px;border-radius:7px;font-weight:700}
+    nav a:hover{background:var(--accent-soft);color:var(--accent)}
+    nav+hr{display:none}
+    main{width:min(520px,calc(100% - 24px));margin:48px auto;padding:24px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 28px rgba(38,30,18,.1)}
+    h1{margin:0 0 20px;color:#121c24}
+    label{display:block;font-weight:700;margin-bottom:6px}
+    input{width:100%;min-height:48px;padding:9px 12px;border:1px solid var(--line-strong);border-radius:8px;background:#fff;font:inherit}
+    form>div{margin-bottom:16px}
+    button{width:100%;min-height:52px;padding:10px 16px;border:1px solid var(--accent);border-radius:8px;background:var(--accent);color:#fff;font:inherit;font-weight:800;cursor:pointer}
+    button:hover{filter:brightness(.94)}
+  </style>
 </head>
 <body>
   <nav>
-    <a href="/">Home</a> |
-    <a href="/audio/">Audio</a> |
+    <a href="/">In&iacute;cio</a>
+    <a href="/audio/">&Aacute;udio</a>
     {% if user.is_authenticated %}
       <a href="/accounts/logout/">Logout</a>
     {% else %}
@@ -15,6 +32,6 @@
     {% endif %}
   </nav>
   <hr>
-  {% block content %}{% endblock %}
+  <main>{% block content %}{% endblock %}</main>
 </body>
 </html>
