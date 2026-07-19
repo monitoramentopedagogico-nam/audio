@@ -43,11 +43,13 @@ const transcriptionMeter = document.getElementById('transcriptionMeter');
 const transcriptionInstrument = document.getElementById('transcriptionInstrument');
 const transcriptionKey = document.getElementById('transcriptionKey');
 const transcriptionDetectedKey = document.getElementById('transcriptionDetectedKey');
+const transcriptionTitle = document.getElementById('transcriptionTitle');
 const startTranscriptionBtn = document.getElementById('startTranscriptionBtn');
 const stopTranscriptionBtn = document.getElementById('stopTranscriptionBtn');
 const playTranscriptionBtn = document.getElementById('playTranscriptionBtn');
 const playTranscriptionKeyBtn = document.getElementById('playTranscriptionKeyBtn');
 const clearTranscriptionBtn = document.getElementById('clearTranscriptionBtn');
+const saveTranscriptionBtn = document.getElementById('saveTranscriptionBtn');
 const transcriptionStatus = document.getElementById('transcriptionStatus');
 const studentScoreContainer = document.getElementById('studentScoreContainer');
 // exercise UI
@@ -341,6 +343,7 @@ let SILENCE_RMS = 0.0015;
 const MIN_PITCH_HZ = 45;
 const MAX_PITCH_HZ = 1200;
 const REFERENCE_TONE_GAIN = 0.45;
+const TRANSCRIPTION_PLAYBACK_GAIN = 0.40;
 const READING_SCORE_PAGE_SIZE = 24;
 const referenceReverbBuses = new WeakMap();
 
@@ -1060,7 +1063,7 @@ function getReferenceReverbBus(ctx){
     }
   }
   convolver.buffer = impulse;
-  wetGain.gain.value = 0.16;
+  wetGain.gain.value = 0.10;
   convolver.connect(wetGain);
   wetGain.connect(ctx.destination);
   const bus = {input: convolver};
@@ -1068,7 +1071,7 @@ function getReferenceReverbBus(ctx){
   return bus;
 }
 
-function playReferenceTone(frequency, startTime, duration, destinationBus = null){
+function playReferenceTone(frequency, startTime, duration, destinationBus = null, peakGain = REFERENCE_TONE_GAIN){
   const output = audioCtx.createGain();
   const filter = audioCtx.createBiquadFilter();
   const vibrato = audioCtx.createOscillator();
@@ -1085,8 +1088,8 @@ function playReferenceTone(frequency, startTime, duration, destinationBus = null
   filter.Q.setValueAtTime(1.6, startTime);
 
   output.gain.setValueAtTime(0.0001, startTime);
-  output.gain.exponentialRampToValueAtTime(REFERENCE_TONE_GAIN, startTime + 0.08);
-  output.gain.setValueAtTime(REFERENCE_TONE_GAIN, startTime + Math.max(0.12, duration - 0.18));
+  output.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.08);
+  output.gain.setValueAtTime(peakGain, startTime + Math.max(0.12, duration - 0.18));
   output.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
 
   vibrato.type = 'sine';
@@ -1807,8 +1810,8 @@ function start(){
         if(hnrValEl) hnrValEl.textContent = hnrDb;
         // attack detection (fast increase in RMS)
         const currentRms = rms;
-        let attack = false;
-        if(currentRms - prevRms > 0.03) attack = true;
+        const rmsRise = currentRms - prevRms;
+        const attack = prevRms > 0.0002 && rmsRise >= Math.max(0.002, prevRms * 0.55);
         prevRms = currentRms;
         if(attackValEl) attackValEl.textContent = attack ? 'sim' : '—';
         // update RMS meter
@@ -1837,7 +1840,7 @@ function start(){
           if(spectrumPitch) currentEstimatedPitch = spectrumPitch;
         }
 
-        if(transcriptionActive) captureTranscriptionNote(transcriptionWrittenNoteFromPitch(currentEstimatedPitch), rms);
+        if(transcriptionActive) captureTranscriptionNote(transcriptionWrittenNoteFromPitch(currentEstimatedPitch), rms, attack);
 
         analyzeAndSuggest(freqData, currentEstimatedPitch);
         updateLevel(freqData);
@@ -1935,10 +1938,25 @@ function start(){
   });
 }
 
-function captureTranscriptionNote(note, rms){
+function captureTranscriptionNote(note, rms, attack = false){
   const currentTime = performance.now() - captureStartTime;
-  const transcriptionThreshold = Math.max(0.0008, Math.min(MIN_NOTE_RMS * 0.45, calibratedNoiseRms * 0.45));
+  const transcriptionThreshold = transcriptionSignalThreshold();
   if(note && rms >= transcriptionThreshold){
+    // A new tongue attack can repeat the same pitch without an audible silence.
+    // Split it only after a minimum duration so normal amplitude fluctuations do
+    // not create duplicate notes.
+    if(note === lastDetectedNote && attack && currentScoreEvent && currentTime - currentScoreEvent.start >= 120){
+      currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
+      currentScoreEvent = {note, originalNote:note, start:currentTime, duration:0};
+      scoreEvents.push(currentScoreEvent);
+      noteHistory.push(note);
+      if(noteHistory.length > 16) noteHistory.shift();
+      updateNoteDisplay();
+      if(transcriptionStatus) transcriptionStatus.textContent = `Captando: ${noteToWrittenSolfege(note)} (${note}) · ${scoreEvents.length} nota${scoreEvents.length === 1 ? '' : 's'}`;
+      transcriptionCandidateNote = null;
+      transcriptionCandidateFrames = 0;
+      return;
+    }
     if(note !== lastDetectedNote){
       if(note !== transcriptionCandidateNote){
         transcriptionCandidateNote = note;
@@ -1946,7 +1964,7 @@ function captureTranscriptionNote(note, rms){
         return;
       }
       transcriptionCandidateFrames += 1;
-      if(transcriptionCandidateFrames < 5) return;
+      if(transcriptionCandidateFrames < 3) return;
       if(currentScoreEvent) currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
       currentScoreEvent = {note, originalNote:note, start:currentTime, duration:0};
       scoreEvents.push(currentScoreEvent);
@@ -1986,6 +2004,9 @@ function startScriptProcessorFallback(inputNode){
     let sum = 0;
     for(let i=0;i<buf.length;i++) sum += buf[i] * buf[i];
     const rms = Math.sqrt(sum / buf.length);
+    const rmsRise = rms - prevRms;
+    const attack = prevRms > 0.0002 && rmsRise >= Math.max(0.002, prevRms * 0.55);
+    prevRms = rms;
     captureCalibrationSample(rms);
     updateMicrophoneDiagnostic(rms);
     updatePitchEstimate(buf, rms, audioCtx.sampleRate);
@@ -1995,7 +2016,7 @@ function startScriptProcessorFallback(inputNode){
       const spectrumPitch = estimatePitchFromSpectrum(freqData);
       if(spectrumPitch) currentEstimatedPitch = spectrumPitch;
     }
-    if(transcriptionActive) captureTranscriptionNote(transcriptionWrittenNoteFromPitch(currentEstimatedPitch), rms);
+    if(transcriptionActive) captureTranscriptionNote(transcriptionWrittenNoteFromPitch(currentEstimatedPitch), rms, attack);
     drawSpectrum(freqData);
     updateLevel(freqData);
     if(rmsFillEl) rmsFillEl.style.width = Math.min(100, Math.round(Math.min(1, rms*12)*100)) + '%';
@@ -2202,15 +2223,21 @@ function hasUsableSignal(rms){
 }
 
 function hasPitchDetectionSignal(rms){
-  return transcriptionActive ? rms >= Math.max(0.0008, MIN_NOTE_RMS * 0.4) : hasUsableSignal(rms);
+  return transcriptionActive ? rms >= transcriptionSignalThreshold() : hasUsableSignal(rms);
+}
+
+function transcriptionSignalThreshold(){
+  // Reject room noise and the unstable tail of the sax note, while retaining
+  // softer attacks measured during microphone calibration.
+  return Math.max(0.0008, MIN_NOTE_RMS * 0.70, calibratedNoiseRms * 1.10);
 }
 
 function updatePitchEstimate(buf, rms, sampleRate){
-  const pitchSilenceThreshold = transcriptionActive ? Math.max(0.0006, SILENCE_RMS * 0.35) : SILENCE_RMS;
-  const pitchDetectionThreshold = transcriptionActive ? Math.max(0.0008, MIN_NOTE_RMS * 0.4) : MIN_NOTE_RMS;
+  const pitchSilenceThreshold = transcriptionActive ? Math.max(0.0007, calibratedNoiseRms * 1.02) : SILENCE_RMS;
+  const pitchDetectionThreshold = transcriptionActive ? transcriptionSignalThreshold() : MIN_NOTE_RMS;
   if(rms < pitchSilenceThreshold){
     missedPitchFrames += 1;
-    if(missedPitchFrames > 3) currentEstimatedPitch = null;
+    if(missedPitchFrames > (transcriptionActive ? 1 : 3)) currentEstimatedPitch = null;
     return null;
   }
 
@@ -2221,12 +2248,21 @@ function updatePitchEstimate(buf, rms, sampleRate){
 
   if(pitch){
     missedPitchFrames = 0;
-    currentEstimatedPitch = currentEstimatedPitch ? currentEstimatedPitch * 0.55 + pitch * 0.45 : pitch;
+    if(currentEstimatedPitch){
+      const semitoneDistance = Math.abs(12 * Math.log2(pitch / currentEstimatedPitch));
+      // Follow a real note change immediately. Within the same note, retain a
+      // small amount of smoothing to ignore vibrato and embouchure fluctuation.
+      currentEstimatedPitch = transcriptionActive && semitoneDistance >= 0.65
+        ? pitch
+        : currentEstimatedPitch * (transcriptionActive ? 0.25 : 0.55) + pitch * (transcriptionActive ? 0.75 : 0.45);
+    } else {
+      currentEstimatedPitch = pitch;
+    }
     pitchHistory.push(currentEstimatedPitch);
     if(pitchHistory.length > 80) pitchHistory.shift();
   } else {
     missedPitchFrames += 1;
-    if(missedPitchFrames > 10) currentEstimatedPitch = null;
+    if(missedPitchFrames > (transcriptionActive ? 2 : 10)) currentEstimatedPitch = null;
   }
   return currentEstimatedPitch;
 }
@@ -4212,19 +4248,8 @@ async function playScoreSequence(){
     const instrumentTranspose = instrument === 'alto' ? -9 : instrument === 'tenor' || instrument === 'soprano' ? -2 : 0;
     const frequency = writtenMidi === null ? null : midiToFrequency(writtenMidi + instrumentTranspose);
     if (!frequency) return;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = frequency;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
     const noteStart = startTime + Math.max(0, (event.start - firstEventStart) / 1000);
-    gain.gain.setValueAtTime(0, noteStart);
-    gain.gain.linearRampToValueAtTime(0.25, noteStart + 0.02);
-    gain.gain.setValueAtTime(0.25, noteStart + duration - 0.05);
-    gain.gain.linearRampToValueAtTime(0, noteStart + duration);
-    osc.start(noteStart);
-    osc.stop(noteStart + duration);
+    playReferenceTone(frequency, noteStart, duration, null, TRANSCRIPTION_PLAYBACK_GAIN);
     finishTime = Math.max(finishTime, noteStart + duration);
   });
   window.setTimeout(()=>{
@@ -4329,6 +4354,7 @@ function buildMusicXML(events){
     return {step: stepMap[name] || 'C', alter: alterMap[name]||0, octave};
   }
   function typeFromFactor(f){ if(f===0.25) return '16th'; if(f===0.5) return 'eighth'; if(f===1) return 'quarter'; if(f===2) return 'half'; return 'whole'; }
+  function typeFromDivisions(value){ return typeFromFactor(value / divisions); }
 
   const meterMatch = String(transcriptionMeter ? transcriptionMeter.value : '4/4').match(/^(\d+)\/(\d+)$/);
   const meterBeats = meterMatch ? Number(meterMatch[1]) : 4;
@@ -4366,34 +4392,36 @@ function buildMusicXML(events){
     const quant = quantizeDuration(durMs);
     const durDivs = Math.round(divisions * quant.factor);
 
-    // measure boundary handling
-    if(measurePos + durDivs > measureDivs){
-      // split note across measures by closing/opening measure (simple approach: move note to next measure)
-      out += `</measure>\n`;
-      measureIndex++; measurePos=0; openMeasure();
-    }
-
     const p = noteToPitch(ev.note);
-    if(p){
-      out += `<note>\n<pitch>\n<step>${p.step}</step>\n` + (p.alter? `<alter>${p.alter}</alter>\n` : '') + `<octave>${p.octave}</octave>\n</pitch>\n`;
-    } else {
-      out += `<note>\n`;
+    let remainingNoteDivs = durDivs;
+    let continuation = false;
+    while(remainingNoteDivs > 0){
+      if(measurePos >= measureDivs){
+        out += `</measure>\n`;
+        measureIndex++; measurePos=0; openMeasure();
+      }
+      const segmentDivs = Math.min(remainingNoteDivs, measureDivs - measurePos);
+      const continuesNext = remainingNoteDivs > segmentDivs;
+      if(p){
+        out += `<note>\n<pitch>\n<step>${p.step}</step>\n` + (p.alter? `<alter>${p.alter}</alter>\n` : '') + `<octave>${p.octave}</octave>\n</pitch>\n`;
+      } else {
+        out += `<note>\n`;
+      }
+      out += `<duration>${segmentDivs}</duration>\n`;
+      out += `<type>${typeFromDivisions(segmentDivs)}</type>\n`;
+      if(continuation) out += `<tie type="stop"/>\n`;
+      if(continuesNext) out += `<tie type="start"/>\n`;
+      if(continuation || continuesNext){
+        out += `<notations>`;
+        if(continuation) out += `<tied type="stop"/>`;
+        if(continuesNext) out += `<tied type="start"/>`;
+        out += `</notations>\n`;
+      }
+      out += `</note>\n`;
+      measurePos += segmentDivs;
+      remainingNoteDivs -= segmentDivs;
+      continuation = true;
     }
-    out += `<duration>${durDivs}</duration>\n`;
-    out += `<type>${typeFromFactor(quant.factor)}</type>\n`;
-
-    // tie handling: if next event same pitch and immediately adjacent, add tie start/stop
-    const next = events[i+1];
-    const sameNext = next && normalizeNoteName(next.note)===normalizeNoteName(ev.note) && Math.abs((ev.start+durMs)-next.start) < 120;
-    if(sameNext){ out += `<tie type="start"/>\n`; }
-    if(i>0){
-      const prev = events[i-1];
-      const samePrev = prev && normalizeNoteName(prev.note)===normalizeNoteName(ev.note) && Math.abs(prev.start+prev.duration - ev.start) < 120;
-      if(samePrev){ out += `<tie type="stop"/>\n`; }
-    }
-
-    out += `</note>\n`;
-    measurePos += durDivs;
     prevEnd = startMs + durMs;
   }
 
@@ -4533,6 +4561,7 @@ function updateNoteDisplay(){
   if (clearScoreBtn) clearScoreBtn.disabled = scoreEvents.length === 0;
   if (playTranscriptionBtn) playTranscriptionBtn.disabled = scoreEvents.length === 0;
   if (clearTranscriptionBtn) clearTranscriptionBtn.disabled = scoreEvents.length === 0;
+  if (saveTranscriptionBtn) saveTranscriptionBtn.disabled = scoreEvents.length === 0;
   updateTranscriptionKeyDisplay();
   if (noteTimeline) {
     noteTimeline.innerHTML = '';
@@ -4578,6 +4607,66 @@ async function playDetectedTranscriptionKey(){
   });
   if(transcriptionStatus) transcriptionStatus.textContent = `Ouvindo ${noteToSolfege(`${key}4`)} maior no ${transcriptionInstrument ? transcriptionInstrument.options[transcriptionInstrument.selectedIndex].textContent : 'sax'}.`;
   window.setTimeout(()=>{ try{ bus.disconnect(); }catch(error){} }, (intervals.length * stepSeconds + 1) * 1000);
+}
+
+function capturedScoreDataForStorage(title){
+  const notes = scoreEvents.map(event=>event.note);
+  const beats = scoreEvents.map(event=>quantizeDuration(Math.max(80, Number(event.duration) || 0)).factor);
+  const meter = transcriptionMeter ? transcriptionMeter.value : '4/4';
+  const capacity = readingMeasureCapacity(meter);
+  const measureStarts = [];
+  let elapsed = 0;
+  beats.forEach((beat, index)=>{
+    if(index > 0 && elapsed >= capacity - 0.001){
+      measureStarts.push(index);
+      elapsed = 0;
+    }
+    elapsed += beat;
+  });
+  const key = effectiveTranscriptionKey();
+  return {
+    title,
+    key:`${key}4`,
+    keyFifths:readingKeyFifthsForRoot(`${key}4`),
+    meter,
+    bpm:clampBpm(transcriptionBpm ? transcriptionBpm.value : 60),
+    notes,
+    beats,
+    measureStarts,
+    sourceMeasureNoteStarts:[0, ...measureStarts],
+    sourceMusicXml:buildMusicXML(scoreEvents),
+    instrument:transcriptionInstrument ? transcriptionInstrument.value : 'alto',
+    capturedEvents:scoreEvents.map(event=>({note:event.note, start:event.start, duration:event.duration})),
+    degrees:notes.map((_, index)=>String(index + 1)),
+    functions:notes.map(()=> 'nota captada do estudante'),
+    pitchTheory:'Melodia captada pelo microfone.',
+    rhythmTheory:'Duracoes quantizadas conforme o BPM da captacao.',
+    functionTheory:`Tom identificado: ${noteToSolfege(`${key}4`)} maior.`,
+  };
+}
+
+async function saveCapturedTranscription(){
+  if(!scoreEvents.length) return;
+  if(transcriptionActive) stop();
+  const title = (transcriptionTitle ? transcriptionTitle.value : '').trim() || `Melodia ${new Date().toLocaleDateString('pt-BR')}`;
+  if(saveTranscriptionBtn) saveTranscriptionBtn.disabled = true;
+  if(transcriptionStatus) transcriptionStatus.textContent = 'Salvando partitura captada...';
+  try{
+    const response = await fetch('/api/saved_scores/', {
+      method:'POST',
+      headers:{'Content-Type':'application/json', 'X-CSRFToken':getCSRF() || ''},
+      body:JSON.stringify({title, score_data:capturedScoreDataForStorage(title)}),
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.message || 'Nao foi possivel salvar.');
+    if(transcriptionTitle) transcriptionTitle.value = title;
+    if(transcriptionStatus) transcriptionStatus.textContent = `Partitura "${title}" salva em Minhas partituras.`;
+    await loadSavedScores();
+  }catch(error){
+    if(transcriptionStatus) transcriptionStatus.textContent = error.message || 'Falha ao salvar a partitura.';
+  }finally{
+    if(saveTranscriptionBtn) saveTranscriptionBtn.disabled = !scoreEvents.length;
+  }
 }
 
 // simple autocorrelation pitch detection
@@ -4637,6 +4726,7 @@ if(stopTranscriptionBtn) stopTranscriptionBtn.addEventListener('click', ()=>{
 });
 if(playTranscriptionBtn) playTranscriptionBtn.addEventListener('click', playScoreSequence);
 if(playTranscriptionKeyBtn) playTranscriptionKeyBtn.addEventListener('click', playDetectedTranscriptionKey);
+if(saveTranscriptionBtn) saveTranscriptionBtn.addEventListener('click', saveCapturedTranscription);
 if(transcriptionKey) transcriptionKey.addEventListener('change', ()=>{
   transposeCapturedScoreToSelectedKey();
   updateTranscriptionKeyDisplay();

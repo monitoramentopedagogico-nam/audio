@@ -43,11 +43,13 @@ const transcriptionMeter = document.getElementById('transcriptionMeter');
 const transcriptionInstrument = document.getElementById('transcriptionInstrument');
 const transcriptionKey = document.getElementById('transcriptionKey');
 const transcriptionDetectedKey = document.getElementById('transcriptionDetectedKey');
+const transcriptionTitle = document.getElementById('transcriptionTitle');
 const startTranscriptionBtn = document.getElementById('startTranscriptionBtn');
 const stopTranscriptionBtn = document.getElementById('stopTranscriptionBtn');
 const playTranscriptionBtn = document.getElementById('playTranscriptionBtn');
 const playTranscriptionKeyBtn = document.getElementById('playTranscriptionKeyBtn');
 const clearTranscriptionBtn = document.getElementById('clearTranscriptionBtn');
+const saveTranscriptionBtn = document.getElementById('saveTranscriptionBtn');
 const transcriptionStatus = document.getElementById('transcriptionStatus');
 const studentScoreContainer = document.getElementById('studentScoreContainer');
 // exercise UI
@@ -4533,6 +4535,7 @@ function updateNoteDisplay(){
   if (clearScoreBtn) clearScoreBtn.disabled = scoreEvents.length === 0;
   if (playTranscriptionBtn) playTranscriptionBtn.disabled = scoreEvents.length === 0;
   if (clearTranscriptionBtn) clearTranscriptionBtn.disabled = scoreEvents.length === 0;
+  if (saveTranscriptionBtn) saveTranscriptionBtn.disabled = scoreEvents.length === 0;
   updateTranscriptionKeyDisplay();
   if (noteTimeline) {
     noteTimeline.innerHTML = '';
@@ -4578,6 +4581,66 @@ async function playDetectedTranscriptionKey(){
   });
   if(transcriptionStatus) transcriptionStatus.textContent = `Ouvindo ${noteToSolfege(`${key}4`)} maior no ${transcriptionInstrument ? transcriptionInstrument.options[transcriptionInstrument.selectedIndex].textContent : 'sax'}.`;
   window.setTimeout(()=>{ try{ bus.disconnect(); }catch(error){} }, (intervals.length * stepSeconds + 1) * 1000);
+}
+
+function capturedScoreDataForStorage(title){
+  const notes = scoreEvents.map(event=>event.note);
+  const beats = scoreEvents.map(event=>quantizeDuration(Math.max(80, Number(event.duration) || 0)).factor);
+  const meter = transcriptionMeter ? transcriptionMeter.value : '4/4';
+  const capacity = readingMeasureCapacity(meter);
+  const measureStarts = [];
+  let elapsed = 0;
+  beats.forEach((beat, index)=>{
+    if(index > 0 && elapsed >= capacity - 0.001){
+      measureStarts.push(index);
+      elapsed = 0;
+    }
+    elapsed += beat;
+  });
+  const key = effectiveTranscriptionKey();
+  return {
+    title,
+    key:`${key}4`,
+    keyFifths:readingKeyFifthsForRoot(`${key}4`),
+    meter,
+    bpm:clampBpm(transcriptionBpm ? transcriptionBpm.value : 60),
+    notes,
+    beats,
+    measureStarts,
+    sourceMeasureNoteStarts:[0, ...measureStarts],
+    sourceMusicXml:buildMusicXML(scoreEvents),
+    instrument:transcriptionInstrument ? transcriptionInstrument.value : 'alto',
+    capturedEvents:scoreEvents.map(event=>({note:event.note, start:event.start, duration:event.duration})),
+    degrees:notes.map((_, index)=>String(index + 1)),
+    functions:notes.map(()=> 'nota captada do estudante'),
+    pitchTheory:'Melodia captada pelo microfone.',
+    rhythmTheory:'Duracoes quantizadas conforme o BPM da captacao.',
+    functionTheory:`Tom identificado: ${noteToSolfege(`${key}4`)} maior.`,
+  };
+}
+
+async function saveCapturedTranscription(){
+  if(!scoreEvents.length) return;
+  if(transcriptionActive) stop();
+  const title = (transcriptionTitle ? transcriptionTitle.value : '').trim() || `Melodia ${new Date().toLocaleDateString('pt-BR')}`;
+  if(saveTranscriptionBtn) saveTranscriptionBtn.disabled = true;
+  if(transcriptionStatus) transcriptionStatus.textContent = 'Salvando partitura captada...';
+  try{
+    const response = await fetch('/api/saved_scores/', {
+      method:'POST',
+      headers:{'Content-Type':'application/json', 'X-CSRFToken':getCSRF() || ''},
+      body:JSON.stringify({title, score_data:capturedScoreDataForStorage(title)}),
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.message || 'Nao foi possivel salvar.');
+    if(transcriptionTitle) transcriptionTitle.value = title;
+    if(transcriptionStatus) transcriptionStatus.textContent = `Partitura "${title}" salva em Minhas partituras.`;
+    await loadSavedScores();
+  }catch(error){
+    if(transcriptionStatus) transcriptionStatus.textContent = error.message || 'Falha ao salvar a partitura.';
+  }finally{
+    if(saveTranscriptionBtn) saveTranscriptionBtn.disabled = !scoreEvents.length;
+  }
 }
 
 // simple autocorrelation pitch detection
@@ -4637,6 +4700,7 @@ if(stopTranscriptionBtn) stopTranscriptionBtn.addEventListener('click', ()=>{
 });
 if(playTranscriptionBtn) playTranscriptionBtn.addEventListener('click', playScoreSequence);
 if(playTranscriptionKeyBtn) playTranscriptionKeyBtn.addEventListener('click', playDetectedTranscriptionKey);
+if(saveTranscriptionBtn) saveTranscriptionBtn.addEventListener('click', saveCapturedTranscription);
 if(transcriptionKey) transcriptionKey.addEventListener('change', ()=>{
   transposeCapturedScoreToSelectedKey();
   updateTranscriptionKeyDisplay();
