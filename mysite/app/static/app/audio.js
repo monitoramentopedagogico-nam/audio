@@ -336,6 +336,8 @@ let lastMicrophoneDiagnosticAt = 0;
 let transcriptionActive = false;
 let transcriptionCandidateNote = null;
 let transcriptionCandidateFrames = 0;
+let transcriptionPeakRms = 0;
+let transcriptionAttackArmed = false;
 let detectedTranscriptionKey = '';
 
 let MIN_NOTE_RMS = 0.003;
@@ -1717,6 +1719,8 @@ function start(){
   currentScoreEvent = null;
   transcriptionCandidateNote = null;
   transcriptionCandidateFrames = 0;
+  transcriptionPeakRms = 0;
+  transcriptionAttackArmed = false;
   lastMicrophoneFrameAt = 0;
   if(microphoneWatchdogTimer) clearTimeout(microphoneWatchdogTimer);
   const audioConstraints = {
@@ -1942,13 +1946,19 @@ function captureTranscriptionNote(note, rms, attack = false){
   const currentTime = performance.now() - captureStartTime;
   const transcriptionThreshold = transcriptionSignalThreshold();
   if(note && rms >= transcriptionThreshold){
+    if(transcriptionPeakRms <= 0) transcriptionPeakRms = rms;
+    if(rms <= transcriptionPeakRms * 0.68) transcriptionAttackArmed = true;
+    transcriptionPeakRms = Math.max(rms, transcriptionPeakRms * 0.992);
+    const confirmedAttack = attack && transcriptionAttackArmed;
     // A new tongue attack can repeat the same pitch without an audible silence.
     // Split it only after a minimum duration so normal amplitude fluctuations do
     // not create duplicate notes.
-    if(note === lastDetectedNote && attack && currentScoreEvent && currentTime - currentScoreEvent.start >= 120){
+    if(note === lastDetectedNote && confirmedAttack && currentScoreEvent && currentTime - currentScoreEvent.start >= 120){
       currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
       currentScoreEvent = {note, originalNote:note, start:currentTime, duration:0};
       scoreEvents.push(currentScoreEvent);
+      transcriptionPeakRms = rms;
+      transcriptionAttackArmed = false;
       noteHistory.push(note);
       if(noteHistory.length > 16) noteHistory.shift();
       updateNoteDisplay();
@@ -1968,6 +1978,8 @@ function captureTranscriptionNote(note, rms, attack = false){
       if(currentScoreEvent) currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
       currentScoreEvent = {note, originalNote:note, start:currentTime, duration:0};
       scoreEvents.push(currentScoreEvent);
+      transcriptionPeakRms = rms;
+      transcriptionAttackArmed = false;
       lastDetectedNote = note;
       noteHistory.push(note);
       if(noteHistory.length > 16) noteHistory.shift();
@@ -1979,6 +1991,8 @@ function captureTranscriptionNote(note, rms, attack = false){
   } else {
     transcriptionCandidateNote = null;
     transcriptionCandidateFrames = 0;
+    transcriptionPeakRms = 0;
+    transcriptionAttackArmed = false;
     if(lastDetectedNote && currentScoreEvent){
       currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
       currentScoreEvent = null;
@@ -2036,6 +2050,7 @@ function stop(){
     currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
     currentScoreEvent = null;
   }
+  removeUnstableFinalCapture();
   if(processor) processor.disconnect();
   if(analyser) analyser.disconnect();
   if(source && source.mediaStream) {
@@ -2056,6 +2071,20 @@ function stop(){
   updateNoteDisplay();
   renderStudentTranscription();
   transcriptionActive = false;
+}
+
+function removeUnstableFinalCapture(){
+  if(scoreEvents.length < 2) return;
+  const last = scoreEvents[scoreEvents.length - 1];
+  const previous = scoreEvents[scoreEvents.length - 2];
+  const lastDuration = Math.max(0, Number(last.duration) || 0);
+  const lastMidi = noteNameToMidiNumber(last.note);
+  const previousMidi = noteNameToMidiNumber(previous.note);
+  const largeReleaseJump = lastMidi !== null && previousMidi !== null && Math.abs(lastMidi - previousMidi) >= 5;
+  if(lastDuration < 180 && largeReleaseJump){
+    scoreEvents.pop();
+    lastDetectedNote = previous.note;
+  }
 }
 
 async function renderStudentTranscription(){
