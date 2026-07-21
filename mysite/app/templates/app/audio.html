@@ -435,6 +435,11 @@
     .reading-disclosure-content.reading-theory-grid{margin:0}
     .student-score-container{margin-top:10px;min-height:150px;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff;overflow-x:auto}
     .student-score-container svg{display:block;width:100%;min-width:560px;height:auto}
+    .transcription-editor{display:grid;gap:8px;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft)}
+    .transcription-editor[hidden]{display:none}
+    .transcription-edit-actions,.transcription-note-list{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+    .transcription-edit-actions button,.transcription-note-chip{width:auto;min-height:40px;padding:7px 11px}
+    .transcription-note-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
     .score-import-panel{
       display:flex;
       gap:10px;
@@ -965,6 +970,17 @@
         <p><strong id="transcriptionDetectedKey">Tom tocado: aguardando notas</strong></p>
         <p id="transcriptionStatus" role="status">Defina o BPM, inicie e toque com pulso constante.</p>
         <div id="studentScoreContainer" class="student-score-container"><p>A pauta aparecer&aacute; aqui.</p></div>
+        <div id="transcriptionEditor" class="transcription-editor" hidden>
+          <strong id="transcriptionEditSelection">Selecione uma nota para corrigir</strong>
+          <div class="transcription-edit-actions">
+            <button id="transcriptionSemitoneDown" type="button" disabled>&minus; Semitom</button>
+            <button id="transcriptionSemitoneUp" type="button" disabled>&plus; Semitom</button>
+            <button id="transcriptionOctaveDown" type="button" disabled>&minus; Oitava</button>
+            <button id="transcriptionOctaveUp" type="button" disabled>&plus; Oitava</button>
+            <button id="transcriptionDeleteNote" type="button" disabled>Excluir nota</button>
+          </div>
+          <div id="transcriptionNoteList" class="transcription-note-list" aria-label="Notas captadas para correção"></div>
+        </div>
   </section>
   <div class="dashboard-toolbar">
     <button id="advancedToggle" type="button">Mostrar ferramentas avan&ccedil;adas</button>
