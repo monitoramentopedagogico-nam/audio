@@ -1,3 +1,8 @@
+/* GENERATED FILE - DO NOT EDIT DIRECTLY.
+ * Run: python scripts/refactor_frontend.py
+ * Sources: mysite/app/static/app/audio/*.js
+ */
+/* module: 01-core.js */
 let audioCtx, analyser, source, processor, gainNode, mediaDest, silentGain;
 let raf;
 let currentEstimatedPitch = null;
@@ -50,16 +55,19 @@ const playTranscriptionBtn = document.getElementById('playTranscriptionBtn');
 const playTranscriptionKeyBtn = document.getElementById('playTranscriptionKeyBtn');
 const clearTranscriptionBtn = document.getElementById('clearTranscriptionBtn');
 const saveTranscriptionBtn = document.getElementById('saveTranscriptionBtn');
+const saveTranscriptionPdfBtn = document.getElementById('saveTranscriptionPdfBtn');
 const transcriptionStatus = document.getElementById('transcriptionStatus');
 const studentScoreContainer = document.getElementById('studentScoreContainer');
 const transcriptionEditor = document.getElementById('transcriptionEditor');
 const transcriptionEditSelection = document.getElementById('transcriptionEditSelection');
 const transcriptionNoteList = document.getElementById('transcriptionNoteList');
 const transcriptionSemitoneDown = document.getElementById('transcriptionSemitoneDown');
+const transcriptionNaturalNote = document.getElementById('transcriptionNaturalNote');
 const transcriptionSemitoneUp = document.getElementById('transcriptionSemitoneUp');
 const transcriptionOctaveDown = document.getElementById('transcriptionOctaveDown');
 const transcriptionOctaveUp = document.getElementById('transcriptionOctaveUp');
 const transcriptionDeleteNote = document.getElementById('transcriptionDeleteNote');
+const transcriptionDurationTools = Array.from(document.querySelectorAll('.transcription-duration-tool'));
 // exercise UI
 const exerciseSelect = document.getElementById('exerciseSelect');
 const startExerciseBtn = document.getElementById('startExerciseBtn');
@@ -1098,10 +1106,14 @@ function playReferenceTone(frequency, startTime, duration, destinationBus = null
   filter.frequency.setValueAtTime(Math.min(3600, Math.max(1100, frequency * 9)), startTime);
   filter.Q.setValueAtTime(1.6, startTime);
 
+  const safeDuration = Math.max(0.045, duration);
+  const attackDuration = Math.min(0.055, safeDuration * 0.22);
+  const releaseDuration = Math.min(0.09, safeDuration * 0.24);
+  const sustainEnd = Math.max(startTime + attackDuration, startTime + safeDuration - releaseDuration);
   output.gain.setValueAtTime(0.0001, startTime);
-  output.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.08);
-  output.gain.setValueAtTime(peakGain, startTime + Math.max(0.12, duration - 0.18));
-  output.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+  output.gain.exponentialRampToValueAtTime(peakGain, startTime + attackDuration);
+  output.gain.setValueAtTime(peakGain, sustainEnd);
+  output.gain.exponentialRampToValueAtTime(0.0001, startTime + safeDuration);
 
   vibrato.type = 'sine';
   vibrato.frequency.setValueAtTime(5.2, startTime);
@@ -1118,7 +1130,7 @@ function playReferenceTone(frequency, startTime, duration, destinationBus = null
     osc.connect(partialGain);
     partialGain.connect(filter);
     osc.start(startTime);
-    osc.stop(startTime + duration + 0.03);
+    osc.stop(startTime + safeDuration + 0.025);
   });
 
   filter.connect(output);
@@ -1128,8 +1140,9 @@ function playReferenceTone(frequency, startTime, duration, destinationBus = null
     output.connect(audioCtx.destination);
     output.connect(getReferenceReverbBus(audioCtx).input);
   }
-  vibrato.start(startTime + 0.12);
-  vibrato.stop(startTime + duration + 0.03);
+  const vibratoStart = startTime + Math.min(0.06, safeDuration * 0.25);
+  vibrato.start(vibratoStart);
+  vibrato.stop(startTime + safeDuration + 0.025);
 }
 
 async function playReferenceSequence(sequence, bpm, onNoteChange, beatDurations){
@@ -1151,7 +1164,9 @@ async function playReferenceSequence(sequence, bpm, onNoteChange, beatDurations)
   const scheduledNotes = sequence.map((note, index)=>{
     const noteBeats = Math.max(0.125, Number(beatDurations && beatDurations[index]) || 1);
     const noteStart = start + elapsedBeats * beat;
-    const duration = Math.max(0.08, Math.min(noteBeats * beat * 0.88, noteBeats * beat - 0.03));
+    const duration = window.SaxTiming
+      ? window.SaxTiming.soundingDuration(noteBeats, bpm)
+      : Math.max(0.08, Math.min(noteBeats * beat * 0.98, noteBeats * beat - 0.012));
     elapsedBeats += noteBeats;
     return {note, index, noteStart, duration};
   });
@@ -1473,6 +1488,8 @@ if(advancedToggle && advancedTools) advancedToggle.addEventListener('click', ()=
 setupBeginnerMode();
 
 // Metronome functions
+
+/* module: 02-data-and-metronome.js */
 function playClick(time){
   if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const o = audioCtx.createOscillator();
@@ -1709,6 +1726,7 @@ exportDatasetBtn && exportDatasetBtn.addEventListener('click', async ()=>{
 
 renderLabeledList();
 
+/* module: 03-capture-and-analysis.js */
 function start(){
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     setBeginnerStatus('bad', 'Sem microfone', 'Abra pelo localhost ou HTTPS e permita o acesso ao microfone.');
@@ -2113,10 +2131,124 @@ async function renderStudentTranscription(){
     });
     await studentTranscriptionOsmd.load(buildMusicXML(scoreEvents));
     studentTranscriptionOsmd.render();
+    bindTranscriptionScoreNotes();
   }catch(error){
     console.error('Nao foi possivel desenhar a transcricao completa.', error);
     renderScore();
   }
+}
+
+function bindTranscriptionScoreNotes(){
+  if(!studentTranscriptionOsmd || !studentScoreContainer || !scoreEvents.length) return;
+  try{
+    const measureList = studentTranscriptionOsmd.GraphicSheet && studentTranscriptionOsmd.GraphicSheet.MeasureList;
+    if(!Array.isArray(measureList)) return;
+    const graphicalNotes = [];
+    measureList.forEach(measureRow=>{
+      (Array.isArray(measureRow) ? measureRow : []).forEach(measure=>{
+        const staffEntries = measure && (measure.staffEntries || measure.StaffEntries) || [];
+        staffEntries.forEach(staffEntry=>{
+          const voiceEntries = staffEntry && (staffEntry.graphicalVoiceEntries || staffEntry.GraphicalVoiceEntries) || [];
+          voiceEntries.forEach(voiceEntry=>{
+            const notes = voiceEntry && (voiceEntry.notes || voiceEntry.Notes) || [];
+            notes.forEach(note=>{
+              const sourceNote = note && (note.sourceNote || note.SourceNote);
+              if(!sourceNote || (typeof sourceNote.isRest === 'function' && sourceNote.isRest())) return;
+              graphicalNotes.push(note);
+            });
+          });
+        });
+      });
+    });
+
+    let eventIndex = -1;
+    graphicalNotes.forEach(graphicalNote=>{
+      const sourceNote = graphicalNote.sourceNote || graphicalNote.SourceNote;
+      const tie = sourceNote && (sourceNote.NoteTie || sourceNote.noteTie);
+      const tieStart = tie && (tie.StartNote || tie.startNote);
+      const isTieContinuation = Boolean(tieStart && tieStart !== sourceNote && eventIndex >= 0);
+      if(!isTieContinuation) eventIndex += 1;
+      if(eventIndex >= scoreEvents.length) return;
+      const svgGroup = typeof graphicalNote.getSVGGElement === 'function' ? graphicalNote.getSVGGElement() : null;
+      if(!svgGroup) return;
+      const noteHead = typeof graphicalNote.getVFNoteSVG === 'function' ? graphicalNote.getVFNoteSVG() : null;
+      const editTarget = noteHead || svgGroup;
+      const linkedEventIndex = eventIndex;
+      editTarget.classList.add('transcription-score-note-editable');
+      svgGroup.dataset.transcriptionEventIndex = String(linkedEventIndex);
+      svgGroup.setAttribute('role', 'button');
+      svgGroup.setAttribute('tabindex', '0');
+      svgGroup.setAttribute('aria-label', `Editar nota ${linkedEventIndex + 1}: ${scoreEvents[linkedEventIndex].note}`);
+      const selectNote = ()=>selectTranscriptionNote(linkedEventIndex);
+      editTarget.addEventListener('click', selectNote);
+      let dragStartY = null;
+      let dragSemitones = 0;
+      editTarget.addEventListener('pointerdown', event=>{
+        if(event.button !== undefined && event.button !== 0) return;
+        event.preventDefault();
+        selectNote();
+        dragStartY = event.clientY;
+        dragSemitones = 0;
+        svgGroup.classList.add('transcription-score-note-dragging');
+        if(typeof editTarget.setPointerCapture === 'function') editTarget.setPointerCapture(event.pointerId);
+      });
+      editTarget.addEventListener('pointermove', event=>{
+        if(dragStartY === null) return;
+        dragSemitones = Math.max(-24, Math.min(24, Math.round((dragStartY - event.clientY) / 8)));
+        if(transcriptionEditSelection){
+          const direction = dragSemitones > 0 ? `+${dragSemitones}` : String(dragSemitones);
+          transcriptionEditSelection.textContent = dragSemitones
+            ? `Mover nota ${linkedEventIndex + 1}: ${direction} semitom${Math.abs(dragSemitones) === 1 ? '' : 's'}`
+            : `Nota ${linkedEventIndex + 1} selecionada`;
+        }
+      });
+      const finishDrag = event=>{
+        if(dragStartY === null) return;
+        const semitones = dragSemitones;
+        dragStartY = null;
+        dragSemitones = 0;
+        svgGroup.classList.remove('transcription-score-note-dragging');
+        if(typeof editTarget.releasePointerCapture === 'function' && editTarget.hasPointerCapture && editTarget.hasPointerCapture(event.pointerId)){
+          editTarget.releasePointerCapture(event.pointerId);
+        }
+        selectTranscriptionNote(linkedEventIndex);
+        if(semitones) transposeSelectedTranscriptionNote(semitones);
+      };
+      editTarget.addEventListener('pointerup', finishDrag);
+      editTarget.addEventListener('pointercancel', finishDrag);
+      svgGroup.addEventListener('keydown', event=>{
+        if(event.key === 'Enter' || event.key === ' '){
+          event.preventDefault();
+          selectNote();
+        } else if(event.key === 'ArrowUp' || event.key === 'ArrowDown'){
+          event.preventDefault();
+          selectNote();
+          transposeSelectedTranscriptionNote(event.key === 'ArrowUp' ? 1 : -1);
+        }
+      });
+    });
+    highlightSelectedTranscriptionScoreNote();
+  }catch(error){
+    console.warn('Nao foi possivel ativar a edicao direta na pauta.', error);
+  }
+}
+
+function selectTranscriptionNote(index){
+  if(index < 0 || index >= scoreEvents.length) return;
+  selectedTranscriptionNoteIndex = index;
+  renderTranscriptionEditor();
+  highlightSelectedTranscriptionScoreNote();
+}
+
+function highlightSelectedTranscriptionScoreNote(){
+  if(!studentScoreContainer) return;
+  studentScoreContainer.querySelectorAll('.transcription-score-note-selected').forEach(element=>{
+    element.classList.remove('transcription-score-note-selected');
+  });
+  if(selectedTranscriptionNoteIndex < 0) return;
+  studentScoreContainer.querySelectorAll(`[data-transcription-event-index="${selectedTranscriptionNoteIndex}"]`).forEach(element=>{
+    element.classList.add('transcription-score-note-selected');
+  });
 }
 
 function renderTranscriptionEditor(){
@@ -2136,10 +2268,7 @@ function renderTranscriptionEditor(){
     button.className = `transcription-note-chip${index === selectedTranscriptionNoteIndex ? ' active' : ''}`;
     button.textContent = `${index + 1}: ${noteToWrittenSolfege(event.note)} (${event.note})`;
     button.setAttribute('aria-pressed', index === selectedTranscriptionNoteIndex ? 'true' : 'false');
-    button.addEventListener('click', ()=>{
-      selectedTranscriptionNoteIndex = index;
-      renderTranscriptionEditor();
-    });
+    button.addEventListener('click', ()=>selectTranscriptionNote(index));
     transcriptionNoteList.appendChild(button);
   });
   updateTranscriptionEditButtons();
@@ -2147,8 +2276,14 @@ function renderTranscriptionEditor(){
 
 function updateTranscriptionEditButtons(){
   const selected = selectedTranscriptionNoteIndex >= 0 && selectedTranscriptionNoteIndex < scoreEvents.length;
-  [transcriptionSemitoneDown, transcriptionSemitoneUp, transcriptionOctaveDown, transcriptionOctaveUp, transcriptionDeleteNote].forEach(button=>{
+  [transcriptionSemitoneDown, transcriptionNaturalNote, transcriptionSemitoneUp, transcriptionOctaveDown, transcriptionOctaveUp, transcriptionDeleteNote, ...transcriptionDurationTools].forEach(button=>{
     if(button) button.disabled = !selected;
+  });
+  const selectedFactor = selected
+    ? quantizeDuration(Math.max(80, Number(scoreEvents[selectedTranscriptionNoteIndex].duration) || 0)).factor
+    : null;
+  transcriptionDurationTools.forEach(button=>{
+    button.classList.toggle('active', selected && Number(button.dataset.durationFactor) === selectedFactor);
   });
   if(transcriptionEditSelection){
     transcriptionEditSelection.textContent = selected
@@ -2162,10 +2297,33 @@ async function transposeSelectedTranscriptionNote(semitones){
   const event = scoreEvents[selectedTranscriptionNoteIndex];
   const midi = noteNameToMidiNumber(event.note);
   if(midi === null) return;
-  event.note = midiToNoteName(Math.max(0, Math.min(127, midi + semitones)));
+  const targetMidi = Math.max(0, Math.min(127, midi + semitones));
+  event.note = transposeReadingNote(midiToNoteName(targetMidi), 0, transcriptionKeyPrefersFlats());
   event.originalNote = event.note;
   updateNoteDisplay();
   updateTranscriptionKeyDisplay();
+  await renderStudentTranscription();
+}
+
+async function naturalizeSelectedTranscriptionNote(){
+  if(selectedTranscriptionNoteIndex < 0 || selectedTranscriptionNoteIndex >= scoreEvents.length) return;
+  const event = scoreEvents[selectedTranscriptionNoteIndex];
+  const midi = noteNameToMidiNumber(event.note);
+  if(midi === null) return;
+  const sharpPitchClasses = new Set([1, 3, 6, 8, 10]);
+  const naturalMidi = sharpPitchClasses.has(((midi % 12) + 12) % 12) ? midi - 1 : midi;
+  event.note = midiToNoteName(naturalMidi);
+  event.originalNote = event.note;
+  updateNoteDisplay();
+  updateTranscriptionKeyDisplay();
+  await renderStudentTranscription();
+}
+
+async function setSelectedTranscriptionDuration(factor){
+  if(selectedTranscriptionNoteIndex < 0 || selectedTranscriptionNoteIndex >= scoreEvents.length) return;
+  const bpm = clampBpm(transcriptionBpm ? transcriptionBpm.value || 60 : 60);
+  scoreEvents[selectedTranscriptionNoteIndex].duration = (60000 / bpm) * factor;
+  updateNoteDisplay();
   await renderStudentTranscription();
 }
 
@@ -2536,6 +2694,7 @@ function renderScore(){
   }
 }
 
+/* module: 04-music-theory.js */
 function normalizeNoteName(noteName){
   return noteName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
@@ -2980,6 +3139,7 @@ function buildReadingExercise(){
   };
 }
 
+/* module: 05-reading-and-arrangement.js */
 function noteYFromScientificName(noteName){
   const match = (noteName || '').trim().match(/^([A-Ga-g])(?:#|b)?(-?\d+)$/);
   if(!match) return 84;
@@ -3050,6 +3210,9 @@ function readingScorePageCount(exercise = currentReadingExercise){
 
 function readingScorePageRanges(exercise = currentReadingExercise){
   const total = exercise && exercise.notes ? exercise.notes.length : 0;
+  if(window.SaxTiming){
+    return window.SaxTiming.readingPageRanges(total, exercise && exercise.measureStarts, READING_SCORE_PAGE_SIZE);
+  }
   if(!total) return [{start:0, end:0}];
   const starts = [0, ...(exercise.measureStarts || [])]
     .filter((value, index, values)=>value > 0 && value < total && values.indexOf(value) === index)
@@ -3133,6 +3296,14 @@ function sourceMusicXmlForReadingPage(exercise, pageStart, pageEnd){
   if(!exercise.sourceMusicXml || typeof DOMParser === 'undefined') return '';
   const documentNode = new DOMParser().parseFromString(exercise.sourceMusicXml, 'application/xml');
   if(documentNode.querySelector('parsererror')) return '';
+  const sourcePitchedNoteCount = Array.from(documentNode.querySelectorAll('part:first-of-type note'))
+    .filter(note=>note.querySelector('pitch') && !note.querySelector('chord')).length;
+  const recognizedNoteCount = exercise.notes ? exercise.notes.length : 0;
+  // The study cursor indexes the recognized melodic line. If OMR retained extra
+  // voices, ornaments or tied segments, use the normalized score so one cursor
+  // step always corresponds to one recognized note. The original remains in
+  // the dedicated original-score view.
+  if(sourcePitchedNoteCount !== recognizedNoteCount) return '';
   const transposeSemitones = Number(exercise.transposeSemitones) || 0;
   if(transposeSemitones){
     Array.from(documentNode.querySelectorAll('note > pitch')).forEach(pitch=>{
@@ -3244,9 +3415,27 @@ function readingPageMusicXml(exercise){
 
 function positionReadingOsmdCursor(localIndex){
   if(!readingOsmd || !readingOsmd.cursor) return;
-  readingOsmd.cursor.reset();
-  readingOsmd.cursor.show();
-  for(let index = 0; index < localIndex; index += 1) readingOsmd.cursor.next();
+  const cursor = readingOsmd.cursor;
+  cursor.reset();
+  cursor.show();
+  let cursorSteps = Math.max(0, localIndex);
+  if(currentReadingExercise && typeof DOMParser !== 'undefined'){
+    try{
+      const documentNode = new DOMParser().parseFromString(readingPageMusicXml(currentReadingExercise), 'application/xml');
+      const xmlNotes = Array.from(documentNode.querySelectorAll('part > measure > note'));
+      let pitchedIndex = -1;
+      const targetXmlIndex = xmlNotes.findIndex(noteElement=>{
+        if(!noteElement.querySelector('pitch') || noteElement.querySelector('chord')) return false;
+        pitchedIndex += 1;
+        return pitchedIndex === localIndex;
+      });
+      if(targetXmlIndex >= 0) cursorSteps = targetXmlIndex;
+    }catch(error){
+      console.warn('Falha ao mapear cursor pelo MusicXML; usando indice de nota.', error);
+    }
+  }
+  for(let index = 0; index < cursorSteps; index += 1) cursor.next();
+  cursor.show();
 }
 
 function renderReadingScoreWithOsmd(exercise){
@@ -3873,7 +4062,7 @@ async function playReadingExercise(startIndex = 0, endIndex = null, timelineStar
       : totalSeconds;
     updateReadingPlaybackProgress(elapsedSeconds, totalSeconds);
     updateOriginalPlaybackGuide(index, elapsedSeconds, totalSeconds);
-    if(previousIndex >= 0){
+    if(index >= 0 && previousIndex >= 0 && previousIndex !== index){
       const previousChip = readingNotes ? readingNotes.querySelector(`[data-score-note-index="${previousIndex}"]`) : null;
       const previousNote = readingScoreSvg ? readingScoreSvg.querySelector(`[data-score-note-index="${previousIndex}"]`) : null;
       if(previousChip) previousChip.classList.remove('reference-playing');
@@ -3906,10 +4095,19 @@ async function playReadingExercise(startIndex = 0, endIndex = null, timelineStar
         const targetScroll = Math.max(0, Math.min(maxScroll, noteX - viewportWidth * 0.42));
         readingScoreSvg.scrollTo({left: targetScroll, behavior: longScore ? 'auto' : 'smooth'});
       }
-    } else if(readingOsmd && readingOsmd.cursor){
-      readingOsmd.cursor.hide();
+    } else if(previousIndex >= 0 && readingOsmd && readingOsmdRenderPromise){
+      // The scheduler signals completion with -1. Keep the cursor on the last
+      // performed note and correct any delayed page-render positioning.
+      const pageRanges = readingScorePageRanges(currentReadingExercise);
+      const finalPage = pageRanges.findIndex(range=>previousIndex >= range.start && previousIndex < range.end);
+      if(finalPage === readingScorePage){
+        const finalLocalIndex = previousIndex - pageRanges[finalPage].start;
+        readingOsmdRenderPromise.then(()=>{
+          if(readingScorePage === finalPage) positionReadingOsmdCursor(finalLocalIndex);
+        });
+      }
     }
-    previousIndex = index;
+    if(index >= 0) previousIndex = index;
   }, durations);
   if(sessionId !== readingPlaybackSessionId) return;
   readingPlaybackRunning = false;
@@ -4260,6 +4458,7 @@ function useArrangementAsBeginnerPractice(){
   }
 }
 
+/* module: 06-transcription-and-upload.js */
 function getInstrumentTransposeSemitones(){
   const instrument = beginnerInstrument ? beginnerInstrument.value : 'alto';
   if(instrument === 'alto') return -9; // written C sounds Eb below: major sixth down
@@ -4338,27 +4537,53 @@ async function playScoreSequence(){
   if(ctx.state === 'suspended') await ctx.resume();
   const startTime = ctx.currentTime + 0.08;
   const firstEventStart = Math.min(...scoreEvents.map(event=>Number(event.start) || 0));
-  let finishTime = startTime;
+  const playbackId = ++referencePlaybackId;
+  if(activeReferencePlaybackBus){
+    activeReferencePlaybackBus.gain.cancelScheduledValues(ctx.currentTime);
+    activeReferencePlaybackBus.gain.setValueAtTime(0, ctx.currentTime);
+    try{ activeReferencePlaybackBus.disconnect(); }catch(error){}
+  }
+  const playbackBus = ctx.createGain();
+  playbackBus.gain.setValueAtTime(1, ctx.currentTime);
+  playbackBus.connect(ctx.destination);
+  playbackBus.connect(getReferenceReverbBus(ctx).input);
+  activeReferencePlaybackBus = playbackBus;
   if(playTranscriptionBtn) playTranscriptionBtn.disabled = true;
   if(transcriptionStatus) transcriptionStatus.textContent = 'Reproduzindo a transcricao...';
-  scoreEvents.forEach((event, index) => {
+  const scheduledNotes = scoreEvents.map((event, index) => {
     const nextTime = index < scoreEvents.length - 1 ? scoreEvents[index + 1].start : event.start + 700;
     const durationMs = event.duration > 0 ? event.duration : Math.max(120, nextTime - event.start);
     const quant = quantizeDuration(durationMs);
-    const duration = Math.max(0.08, quant.ms / 1000 * 0.88);
+    const duration = Math.max(0.045, quant.ms / 1000 * 0.96);
     const writtenMidi = noteNameToMidiNumber(event.note);
     const instrument = transcriptionInstrument ? transcriptionInstrument.value : 'alto';
     const instrumentTranspose = instrument === 'alto' ? -9 : instrument === 'tenor' || instrument === 'soprano' ? -2 : 0;
     const frequency = writtenMidi === null ? null : midiToFrequency(writtenMidi + instrumentTranspose);
-    if (!frequency) return;
     const noteStart = startTime + Math.max(0, (event.start - firstEventStart) / 1000);
-    playReferenceTone(frequency, noteStart, duration, null, TRANSCRIPTION_PLAYBACK_GAIN);
-    finishTime = Math.max(finishTime, noteStart + duration);
+    return {frequency, noteStart, duration};
   });
-  window.setTimeout(()=>{
-    if(playTranscriptionBtn) playTranscriptionBtn.disabled = false;
-    if(transcriptionStatus) transcriptionStatus.textContent = 'Reproducao concluida. Confira a pauta ou grave novamente.';
-  }, Math.max(0, (finishTime - ctx.currentTime) * 1000 + 80));
+  const finishTime = scheduledNotes.reduce((latest, note)=>Math.max(latest, note.noteStart + note.duration), startTime);
+  let nextNoteIndex = 0;
+  const scheduleAheadSeconds = 1.5;
+  const scheduleWindow = ()=>{
+    if(playbackId !== referencePlaybackId){
+      if(playTranscriptionBtn) playTranscriptionBtn.disabled = false;
+      return;
+    }
+    const horizon = ctx.currentTime + scheduleAheadSeconds;
+    while(nextNoteIndex < scheduledNotes.length && scheduledNotes[nextNoteIndex].noteStart <= horizon){
+      const note = scheduledNotes[nextNoteIndex];
+      if(note.frequency) playReferenceTone(note.frequency, note.noteStart, note.duration, playbackBus, TRANSCRIPTION_PLAYBACK_GAIN);
+      nextNoteIndex += 1;
+    }
+    if(ctx.currentTime >= finishTime){
+      if(playTranscriptionBtn) playTranscriptionBtn.disabled = false;
+      if(transcriptionStatus) transcriptionStatus.textContent = 'Reproducao concluida. Confira a pauta ou grave novamente.';
+      return;
+    }
+    window.setTimeout(scheduleWindow, 35);
+  };
+  scheduleWindow();
 }
 
 function estimateTranscriptionKey(){
@@ -4391,6 +4616,7 @@ function effectiveTranscriptionKey(){
 function updateTranscriptionKeyDisplay(){
   detectedTranscriptionKey = estimateTranscriptionKey();
   const key = effectiveTranscriptionKey();
+  respellCapturedScoreForKey(key);
   if(transcriptionDetectedKey){
     transcriptionDetectedKey.textContent = detectedTranscriptionKey
       ? `Tom tocado: ${noteToSolfege(`${detectedTranscriptionKey}4`)} maior (${detectedTranscriptionKey})${transcriptionKey && transcriptionKey.value !== 'auto' ? ' · ajustado manualmente' : ''}`
@@ -4398,6 +4624,18 @@ function updateTranscriptionKeyDisplay(){
   }
   if(playTranscriptionKeyBtn) playTranscriptionKeyBtn.disabled = !scoreEvents.length;
   return key;
+}
+
+function transcriptionKeyPrefersFlats(key = effectiveTranscriptionKey()){
+  return readingKeyFifthsForRoot(`${key}4`) < 0;
+}
+
+function respellCapturedScoreForKey(key = effectiveTranscriptionKey()){
+  const preferFlats = transcriptionKeyPrefersFlats(key);
+  scoreEvents.forEach(event=>{
+    event.note = transposeReadingNote(event.note, 0, preferFlats);
+    if(event.originalNote) event.originalNote = transposeReadingNote(event.originalNote, 0, preferFlats);
+  });
 }
 
 function transposeCapturedScoreToSelectedKey(){
@@ -4665,6 +4903,7 @@ function updateNoteDisplay(){
   if (playTranscriptionBtn) playTranscriptionBtn.disabled = scoreEvents.length === 0;
   if (clearTranscriptionBtn) clearTranscriptionBtn.disabled = scoreEvents.length === 0;
   if (saveTranscriptionBtn) saveTranscriptionBtn.disabled = scoreEvents.length === 0;
+  if (saveTranscriptionPdfBtn) saveTranscriptionPdfBtn.disabled = scoreEvents.length === 0;
   updateTranscriptionKeyDisplay();
   if (noteTimeline) {
     noteTimeline.innerHTML = '';
@@ -4772,6 +5011,45 @@ async function saveCapturedTranscription(){
   }
 }
 
+function saveCapturedTranscriptionPdf(){
+  if(!scoreEvents.length || !studentScoreContainer) return;
+  const svg = studentScoreContainer.querySelector('svg');
+  if(!svg){
+    if(transcriptionStatus) transcriptionStatus.textContent = 'Aguarde a pauta terminar de desenhar antes de salvar o PDF.';
+    return;
+  }
+  const rawTitle = transcriptionTitle && transcriptionTitle.value.trim() ? transcriptionTitle.value.trim() : 'Minha partitura';
+  const title = escapeMusicXmlText(rawTitle);
+  const key = effectiveTranscriptionKey();
+  const meter = transcriptionMeter ? transcriptionMeter.value : '4/4';
+  const bpm = clampBpm(transcriptionBpm ? transcriptionBpm.value || 60 : 60);
+  const instrument = transcriptionInstrument && transcriptionInstrument.selectedIndex >= 0
+    ? transcriptionInstrument.options[transcriptionInstrument.selectedIndex].textContent
+    : 'Sax';
+  const printWindow = window.open('', '_blank');
+  if(!printWindow){
+    if(transcriptionStatus) transcriptionStatus.textContent = 'Permita pop-ups deste site para abrir a tela de salvar PDF.';
+    return;
+  }
+  printWindow.opener = null;
+  printWindow.document.open();
+  printWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${title}</title><style>
+    @page{size:A4 landscape;margin:12mm}
+    *{box-sizing:border-box}body{margin:0;color:#111;font-family:Arial,sans-serif;background:#fff}
+    header{margin:0 0 10mm;border-bottom:1px solid #bbb;padding-bottom:4mm}
+    h1{font-size:20pt;margin:0 0 3mm}.meta{font-size:10pt;color:#444;display:flex;gap:8mm;flex-wrap:wrap}
+    .score{width:100%;overflow:visible}.score svg{display:block;width:100%!important;height:auto!important;max-width:none!important}
+  </style></head><body><header><h1>${title}</h1><div class="meta"><span>Tom: ${escapeMusicXmlText(noteToSolfege(`${key}4`))} maior (${escapeMusicXmlText(key)})</span><span>Compasso: ${escapeMusicXmlText(meter)}</span><span>BPM: ${bpm}</span><span>Instrumento: ${escapeMusicXmlText(instrument)}</span></div></header><main class="score">${svg.outerHTML}</main></body></html>`);
+  printWindow.document.close();
+  printWindow.addEventListener('load', ()=>{
+    window.setTimeout(()=>{
+      printWindow.focus();
+      printWindow.print();
+    }, 180);
+  }, {once:true});
+  if(transcriptionStatus) transcriptionStatus.textContent = 'PDF preparado. Escolha "Salvar como PDF" na janela de impressão.';
+}
+
 // simple autocorrelation pitch detection
 function autoCorrelate(buf, sampleRate){
   const size = buf.length;
@@ -4830,11 +5108,16 @@ if(stopTranscriptionBtn) stopTranscriptionBtn.addEventListener('click', ()=>{
 if(playTranscriptionBtn) playTranscriptionBtn.addEventListener('click', playScoreSequence);
 if(playTranscriptionKeyBtn) playTranscriptionKeyBtn.addEventListener('click', playDetectedTranscriptionKey);
 if(transcriptionSemitoneDown) transcriptionSemitoneDown.addEventListener('click', ()=>transposeSelectedTranscriptionNote(-1));
+if(transcriptionNaturalNote) transcriptionNaturalNote.addEventListener('click', naturalizeSelectedTranscriptionNote);
 if(transcriptionSemitoneUp) transcriptionSemitoneUp.addEventListener('click', ()=>transposeSelectedTranscriptionNote(1));
 if(transcriptionOctaveDown) transcriptionOctaveDown.addEventListener('click', ()=>transposeSelectedTranscriptionNote(-12));
 if(transcriptionOctaveUp) transcriptionOctaveUp.addEventListener('click', ()=>transposeSelectedTranscriptionNote(12));
 if(transcriptionDeleteNote) transcriptionDeleteNote.addEventListener('click', deleteSelectedTranscriptionNote);
+transcriptionDurationTools.forEach(button=>{
+  button.addEventListener('click', ()=>setSelectedTranscriptionDuration(Number(button.dataset.durationFactor)));
+});
 if(saveTranscriptionBtn) saveTranscriptionBtn.addEventListener('click', saveCapturedTranscription);
+if(saveTranscriptionPdfBtn) saveTranscriptionPdfBtn.addEventListener('click', saveCapturedTranscriptionPdf);
 if(transcriptionKey) transcriptionKey.addEventListener('change', ()=>{
   transposeCapturedScoreToSelectedKey();
   updateTranscriptionKeyDisplay();

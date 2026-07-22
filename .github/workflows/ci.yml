@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r requirements-dev.txt
+      - run: python scripts/refactor_frontend.py
+      - run: git diff --exit-code -- mysite/app/static/app/audio.js
+      - run: ruff check mysite scripts
+      - run: node --check mysite/app/static/app/audio.js
+      - run: node --test tests/audio-timing.test.js
+      - run: python mysite/manage.py test
+      - run: python mysite/manage.py check --deploy
+        env:
+          DEBUG: 'False'
+          SECRET_KEY: 'ci-only-long-random-secret-key-with-more-than-fifty-characters-123456789'
+          ALLOWED_HOSTS: 'testserver,localhost'
+          CSRF_TRUSTED_ORIGINS: 'https://testserver'

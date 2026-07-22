@@ -22,3 +22,6 @@ htmlcov/
 node_modules/
 dist/
 build/
+
+# Django collectstatic output (generated during image build/deploy)
+mysite/staticfiles/

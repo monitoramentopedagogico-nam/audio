@@ -18,8 +18,37 @@ Este projeto contém uma aplicação Django simples configurada para rodar em Do
 - `Dockerfile` - imagem Python + Django
 - `docker-compose.yml` - serviço web no Docker
 - `requirements.txt` - dependências do Django
+- `requirements-dev.txt` - ferramentas de qualidade usadas no CI
 - `manage.py` - script de gerenciamento Django
 - `mysite/` - código do projeto Django
+- `mysite/app/static/app/audio/` - módulos-fonte do ambiente musical
+- `mysite/app/static/app/audio.js` - bundle gerado; não editar diretamente
+- `mysite/app/static/app/audio.css` - estilos do ambiente musical
+- `tests/audio-timing.test.js` - testes da linha do tempo e paginação musical
+
+### Desenvolvimento do frontend
+
+O arquivo `audio.js` é gerado a partir dos módulos numerados em
+`mysite/app/static/app/audio/`. Depois de alterar um módulo, reconstrua o bundle:
+
+```bash
+python scripts/refactor_frontend.py
+```
+
+A ordem numérica dos módulos preserva o escopo compartilhado da aplicação legada.
+O CI falha se o bundle versionado estiver diferente das fontes.
+
+Para executar as verificações locais:
+
+```bash
+python mysite/manage.py test
+python -m ruff check mysite scripts
+node --check mysite/app/static/app/audio.js
+node --test tests/audio-timing.test.js
+```
+
+O diretório `mysite/staticfiles/` não é versionado. Ele é recriado por
+`collectstatic` durante a construção ou inicialização do container.
 
 ### Comandos úteis
 

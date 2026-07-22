@@ -47,6 +47,10 @@ class PrivacyTests(TestCase):
         response = self.client.get(reverse('audio'))
         self.assertIn("script-src 'self'", response.headers['Content-Security-Policy'])
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '/static/app/audio.css')
+        self.assertContains(response, '/static/app/audio-timing.js')
+        self.assertContains(response, '/static/app/audio.js')
+        self.assertContains(response, 'id="saveTranscriptionPdfBtn"')
         for stage in ('practice', 'repertoire', 'progress', 'profile'):
             self.assertContains(response, f'data-stage-target="{stage}"')
 
