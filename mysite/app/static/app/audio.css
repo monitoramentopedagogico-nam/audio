@@ -613,6 +613,33 @@
     .score-view-switch{display:flex;gap:7px;margin:10px 0 0}
     .score-view-switch button{width:auto;min-height:38px;padding:6px 12px;background:var(--surface-soft);color:var(--ink)}
     .score-view-switch button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+    .score-player-shell.accompaniment-mode{background:#f2f2f2}
+    .score-player-shell.accompaniment-mode .score-page-surface{
+      margin:12px;
+      overflow:hidden;
+      box-shadow:0 2px 8px rgba(0,0,0,.14);
+    }
+    .score-player-shell.accompaniment-mode #readingScoreSvg{
+      min-height:190px;
+      padding:18px 12px;
+      overflow-x:auto;
+      overflow-y:hidden;
+      scrollbar-width:none;
+      scroll-behavior:smooth;
+    }
+    .score-player-shell.accompaniment-mode #readingScoreSvg::-webkit-scrollbar{display:none}
+    .score-player-shell.accompaniment-mode #readingScoreSvg.osmd-rendering svg{
+      width:auto!important;
+      min-width:100%!important;
+      height:155px!important;
+      max-width:none!important;
+    }
+    .score-player-shell.accompaniment-mode #readingScoreSvg [id^="cursorImg"],
+    .score-player-shell.accompaniment-mode #readingScoreSvg .osmd-cursor{
+      filter:drop-shadow(0 0 2px rgba(21,150,111,.45));
+    }
+    .score-player-shell.accompaniment-mode + .reading-page-nav,
+    .score-player-shell.accompaniment-mode ~ .reading-note-strip{display:none}
     #readingOriginalView{position:relative;min-height:520px;background:#fff}
     #readingOriginalView iframe{display:block;width:100%;height:72vh;min-height:520px;border:0}
     #readingOriginalView img{display:block;max-width:100%;height:auto;margin:auto}
@@ -744,6 +771,9 @@
       .score-bpm-stepper input{width:54px!important;min-height:42px}
       .score-player-spacer{display:none}
       .score-page-surface{margin:7px}
+      .score-player-shell.accompaniment-mode .score-page-surface{margin:7px}
+      .score-player-shell.accompaniment-mode #readingScoreSvg{min-height:155px;padding:10px 6px}
+      .score-player-shell.accompaniment-mode #readingScoreSvg.osmd-rendering svg{height:135px!important}
       .score-player-shell.original-comparison .score-comparison-area{grid-template-columns:1fr;padding:7px}
       .score-player-shell.original-comparison .score-study-surface{order:1;position:static}
       .score-player-shell.original-comparison #readingOriginalView{order:2}

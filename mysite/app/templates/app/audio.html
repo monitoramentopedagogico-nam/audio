@@ -216,6 +216,10 @@
         <div id="transcriptionEditor" class="transcription-editor" hidden>
           <strong id="transcriptionEditSelection" class="transcription-edit-selection">Selecione uma nota para corrigir</strong>
           <div class="transcription-edit-actions">
+            <div class="transcription-tool-group" aria-label="Alterar nota na partitura">
+              <button id="transcriptionNoteDown" type="button" title="Mudar para a nota abaixo" aria-label="Mudar para a nota abaixo" disabled>&#8595;</button>
+              <button id="transcriptionNoteUp" type="button" title="Mudar para a nota acima" aria-label="Mudar para a nota acima" disabled>&#8593;</button>
+            </div>
             <div class="transcription-tool-group" aria-label="Duração da nota">
               <button class="transcription-duration-tool" data-duration-factor="4" type="button" title="Semibreve" disabled>&#119133;</button>
               <button class="transcription-duration-tool" data-duration-factor="2" type="button" title="Mínima" disabled>&#119134;</button>
@@ -231,6 +235,10 @@
             <div class="transcription-tool-group" aria-label="Oitava">
               <button id="transcriptionOctaveDown" type="button" title="Descer uma oitava" disabled>&#8595;8</button>
               <button id="transcriptionOctaveUp" type="button" title="Subir uma oitava" disabled>&#8593;8</button>
+            </div>
+            <div class="transcription-tool-group" aria-label="Posi&ccedil;&atilde;o da nota">
+              <button id="transcriptionMoveLeft" type="button" title="Mover nota para a esquerda" aria-label="Mover nota para a esquerda" disabled>&#8592;</button>
+              <button id="transcriptionMoveRight" type="button" title="Mover nota para a direita" aria-label="Mover nota para a direita" disabled>&#8594;</button>
             </div>
             <div class="transcription-tool-group">
               <button id="transcriptionDeleteNote" class="tool-danger" type="button" title="Excluir nota" disabled>&#128465;</button>
@@ -390,6 +398,7 @@
     <div id="scorePlayerShell" class="score-player-shell">
       <div class="score-view-switch" aria-label="Modo de visualiza&ccedil;&atilde;o">
         <button id="readingStudyModeBtn" class="active" type="button">Modo de estudo</button>
+        <button id="readingAccompanimentModeBtn" type="button">Acompanhamento</button>
         <button id="readingOriginalModeBtn" type="button" disabled>Partitura original</button>
         <button id="toggleExecutionViewBtn" type="button" hidden>Ocultar execu&ccedil;&atilde;o</button>
       </div>
@@ -695,6 +704,6 @@
   <script>window.SAX_AUDIO_WORKLET_URL = "{% static 'app/audio-worklet-processor.js' %}";</script>
   <script src="{% static 'app/vendor/opensheetmusicdisplay-1.9.9.min.js' %}"></script>
   <script src="{% static 'app/audio-timing.js' %}"></script>
-  <script src="{% static 'app/audio.js' %}"></script>
+  <script src="{% static 'app/audio.js' %}?v=20260816-edit-pitch"></script>
 </body>
 </html>

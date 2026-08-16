@@ -294,6 +294,26 @@ function positionReadingOsmdCursor(localIndex){
   }
   for(let index = 0; index < cursorSteps; index += 1) cursor.next();
   cursor.show();
+  if(readingViewMode === 'accompaniment'){
+    window.requestAnimationFrame(followReadingAccompanimentCursor);
+  }
+}
+
+function followReadingAccompanimentCursor(){
+  if(readingViewMode !== 'accompaniment' || !readingScoreSvg) return;
+  const cursorElement = readingScoreSvg.querySelector(
+    '[id^="cursorImg"], .osmd-cursor, [class*="cursor"]'
+  );
+  if(!cursorElement) return;
+  const viewport = readingScoreSvg.getBoundingClientRect();
+  const cursorRect = cursorElement.getBoundingClientRect();
+  const cursorCenter = cursorRect.left + cursorRect.width / 2;
+  const target = readingScoreSvg.scrollLeft + cursorCenter - viewport.left - viewport.width * 0.42;
+  const maximum = Math.max(0, readingScoreSvg.scrollWidth - readingScoreSvg.clientWidth);
+  readingScoreSvg.scrollTo({
+    left: Math.max(0, Math.min(maximum, target)),
+    behavior: 'smooth',
+  });
 }
 
 function renderReadingScoreWithOsmd(exercise){
@@ -308,7 +328,13 @@ function renderReadingScoreWithOsmd(exercise){
       drawTitle: false,
       drawingParameters: 'compacttight',
       followCursor: false,
-      cursorsOptions: [{type:3, color:'#e7a3a0', alpha:0.45, follow:false}],
+      renderSingleHorizontalStaffline: readingViewMode === 'accompaniment',
+      cursorsOptions: [{
+        type: readingViewMode === 'accompaniment' ? 2 : 3,
+        color: readingViewMode === 'accompaniment' ? '#15966f' : '#e7a3a0',
+        alpha: readingViewMode === 'accompaniment' ? 0.92 : 0.45,
+        follow: false,
+      }],
     });
   }
   readingOsmd.Zoom = readingScoreZoom;
@@ -615,9 +641,13 @@ function syncOriginalScoreView(exercise = currentReadingExercise){
 
 function setReadingViewMode(mode){
   const showOriginal = mode === 'original' && currentReadingExercise && currentReadingExercise.originalSourceUrl;
+  const showAccompaniment = mode === 'accompaniment';
+  const previousMode = readingViewMode;
+  readingViewMode = showOriginal ? 'original' : (showAccompaniment ? 'accompaniment' : 'study');
   const scoreSurface = readingScoreSvg ? readingScoreSvg.closest('.score-page-surface') : null;
   if(scoreSurface) scoreSurface.hidden = false;
   if(scorePlayerShell) scorePlayerShell.classList.toggle('original-comparison', showOriginal);
+  if(scorePlayerShell) scorePlayerShell.classList.toggle('accompaniment-mode', showAccompaniment);
   if(readingOriginalView){
     readingOriginalView.hidden = !showOriginal;
     if(showOriginal){
@@ -635,14 +665,20 @@ function setReadingViewMode(mode){
       readingOriginalView.append(caption, guide, viewer);
     }
   }
-  if(readingStudyModeBtn) readingStudyModeBtn.classList.toggle('active', !showOriginal);
+  if(readingStudyModeBtn) readingStudyModeBtn.classList.toggle('active', !showOriginal && !showAccompaniment);
+  if(readingAccompanimentModeBtn) readingAccompanimentModeBtn.classList.toggle('active', showAccompaniment);
   if(readingOriginalModeBtn) readingOriginalModeBtn.classList.toggle('active', showOriginal);
   if(toggleExecutionViewBtn) toggleExecutionViewBtn.hidden = !showOriginal;
   if(!showOriginal && scorePlayerShell){
     scorePlayerShell.classList.remove('execution-hidden');
   }
   syncExecutionViewButton();
-  if(readingOsmd){
+  if(previousMode !== readingViewMode && currentReadingExercise){
+    if(readingOsmd && readingOsmd.cursor) readingOsmd.cursor.hide();
+    readingOsmd = null;
+    readingOsmdRenderPromise = null;
+    renderReadingScore(currentReadingExercise);
+  } else if(readingOsmd){
     window.requestAnimationFrame(()=>{
       try{ readingOsmd.render(); }catch(error){}
     });

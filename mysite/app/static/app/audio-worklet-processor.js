@@ -8,7 +8,23 @@ class FrameProcessor extends AudioWorkletProcessor {
   process(inputs, outputs, parameters){
     const input = inputs[0];
     if(input && input[0]){
-      const channel = input[0];
+      // Audio interfaces often expose their two physical inputs as a stereo
+      // pair. Analyse the channel that actually has signal instead of silently
+      // discarding input 2.
+      let channel = input[0];
+      if(input.length > 1){
+        let selectedEnergy = 0;
+        for(let i=0;i<channel.length;i++) selectedEnergy += channel[i] * channel[i];
+        for(let channelIndex=1;channelIndex<input.length;channelIndex++){
+          const candidate = input[channelIndex];
+          let candidateEnergy = 0;
+          for(let i=0;i<candidate.length;i++) candidateEnergy += candidate[i] * candidate[i];
+          if(candidateEnergy > selectedEnergy){
+            channel = candidate;
+            selectedEnergy = candidateEnergy;
+          }
+        }
+      }
       // if channel length equals frameSize, post directly
       if(channel.length === this.frameSize){
         this.port.postMessage(channel.slice(0));

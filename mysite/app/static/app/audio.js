@@ -61,11 +61,15 @@ const studentScoreContainer = document.getElementById('studentScoreContainer');
 const transcriptionEditor = document.getElementById('transcriptionEditor');
 const transcriptionEditSelection = document.getElementById('transcriptionEditSelection');
 const transcriptionNoteList = document.getElementById('transcriptionNoteList');
+const transcriptionNoteDown = document.getElementById('transcriptionNoteDown');
+const transcriptionNoteUp = document.getElementById('transcriptionNoteUp');
 const transcriptionSemitoneDown = document.getElementById('transcriptionSemitoneDown');
 const transcriptionNaturalNote = document.getElementById('transcriptionNaturalNote');
 const transcriptionSemitoneUp = document.getElementById('transcriptionSemitoneUp');
 const transcriptionOctaveDown = document.getElementById('transcriptionOctaveDown');
 const transcriptionOctaveUp = document.getElementById('transcriptionOctaveUp');
+const transcriptionMoveLeft = document.getElementById('transcriptionMoveLeft');
+const transcriptionMoveRight = document.getElementById('transcriptionMoveRight');
 const transcriptionDeleteNote = document.getElementById('transcriptionDeleteNote');
 const transcriptionDurationTools = Array.from(document.querySelectorAll('.transcription-duration-tool'));
 // exercise UI
@@ -162,6 +166,7 @@ const readingBpmPlus = document.getElementById('readingBpmPlus');
 const readingFullscreen = document.getElementById('readingFullscreen');
 const scorePlayerShell = document.getElementById('scorePlayerShell');
 const readingStudyModeBtn = document.getElementById('readingStudyModeBtn');
+const readingAccompanimentModeBtn = document.getElementById('readingAccompanimentModeBtn');
 const readingOriginalModeBtn = document.getElementById('readingOriginalModeBtn');
 const toggleExecutionViewBtn = document.getElementById('toggleExecutionViewBtn');
 const readingOriginalView = document.getElementById('readingOriginalView');
@@ -340,6 +345,7 @@ let readingPlaybackRunning = false;
 let readingPlaybackPaused = false;
 let readingRepeatEnabled = false;
 let readingScoreZoom = 1;
+let readingViewMode = 'study';
 let readingPlaybackSessionId = 0;
 let readingActiveStartIndex = 0;
 let readingActiveEndIndex = 0;
@@ -352,6 +358,8 @@ let lastMicrophoneDiagnosticAt = 0;
 let transcriptionActive = false;
 let transcriptionCandidateNote = null;
 let transcriptionCandidateFrames = 0;
+let transcriptionCandidateStartedAt = null;
+let transcriptionSilenceStartedAt = null;
 let transcriptionPeakRms = 0;
 let transcriptionAttackArmed = false;
 let selectedTranscriptionNoteIndex = -1;
@@ -1431,6 +1439,7 @@ if(readingFullscreen) readingFullscreen.addEventListener('click', ()=>{
   else if(document.fullscreenElement) document.exitFullscreen();
 });
 if(readingStudyModeBtn) readingStudyModeBtn.addEventListener('click', ()=>setReadingViewMode('study'));
+if(readingAccompanimentModeBtn) readingAccompanimentModeBtn.addEventListener('click', ()=>setReadingViewMode('accompaniment'));
 if(readingOriginalModeBtn) readingOriginalModeBtn.addEventListener('click', ()=>setReadingViewMode('original'));
 if(toggleExecutionViewBtn) toggleExecutionViewBtn.addEventListener('click', toggleOriginalExecutionView);
 if(readingProgress){
@@ -1746,6 +1755,8 @@ function start(){
   currentScoreEvent = null;
   transcriptionCandidateNote = null;
   transcriptionCandidateFrames = 0;
+  transcriptionCandidateStartedAt = null;
+  transcriptionSilenceStartedAt = null;
   transcriptionPeakRms = 0;
   transcriptionAttackArmed = false;
   selectedTranscriptionNoteIndex = -1;
@@ -1755,7 +1766,9 @@ function start(){
     echoCancellation: false,
     noiseSuppression: false,
     autoGainControl: false,
-    channelCount: 1
+    // Interfaces such as M-Audio commonly expose inputs 1 and 2 as a stereo
+    // pair. Request both so a source connected only to input 2 is not lost.
+    channelCount: {ideal: 2}
   };
   navigator.mediaDevices.getUserMedia({audio: audioConstraints}).then(stream=>{
     if(transcriptionStatus) transcriptionStatus.textContent = 'Microfone ativo. Toque notas claras e sustente cada figura pelo tempo desejado.';
@@ -1840,7 +1853,13 @@ function start(){
         // attack detection (fast increase in RMS)
         const currentRms = rms;
         const rmsRise = currentRms - prevRms;
-        const attack = prevRms > 0.0002 && rmsRise >= Math.max(0.002, prevRms * 0.55);
+        // Tongued repetitions on an audio interface often have a smaller
+        // envelope jump than a phone microphone. During transcription, accept
+        // that subtler rebound so repeated pitches remain separate notes.
+        const attack = prevRms > 0.0002 && rmsRise >= Math.max(
+          transcriptionActive ? 0.0007 : 0.002,
+          prevRms * (transcriptionActive ? 0.28 : 0.55)
+        );
         prevRms = currentRms;
         if(attackValEl) attackValEl.textContent = attack ? 'sim' : '—';
         // update RMS meter
@@ -1977,14 +1996,18 @@ function captureTranscriptionNote(note, rms, attack = false){
   const currentTime = performance.now() - captureStartTime;
   const transcriptionThreshold = transcriptionSignalThreshold();
   if(note && rms >= transcriptionThreshold){
+    // Brief pitch/RMS dropouts are common on sustained wind notes. Reacquiring
+    // a signal inside this window continues the existing note instead of
+    // producing a rest followed by another short note.
+    transcriptionSilenceStartedAt = null;
     if(transcriptionPeakRms <= 0) transcriptionPeakRms = rms;
-    if(rms <= transcriptionPeakRms * 0.68) transcriptionAttackArmed = true;
+    if(rms <= transcriptionPeakRms * 0.78) transcriptionAttackArmed = true;
     transcriptionPeakRms = Math.max(rms, transcriptionPeakRms * 0.992);
     const confirmedAttack = attack && transcriptionAttackArmed;
     // A new tongue attack can repeat the same pitch without an audible silence.
     // Split it only after a minimum duration so normal amplitude fluctuations do
     // not create duplicate notes.
-    if(note === lastDetectedNote && confirmedAttack && currentScoreEvent && currentTime - currentScoreEvent.start >= 120){
+    if(note === lastDetectedNote && confirmedAttack && currentScoreEvent && currentTime - currentScoreEvent.start >= 180){
       currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
       currentScoreEvent = {note, originalNote:note, start:currentTime, duration:0};
       scoreEvents.push(currentScoreEvent);
@@ -1996,18 +2019,21 @@ function captureTranscriptionNote(note, rms, attack = false){
       if(transcriptionStatus) transcriptionStatus.textContent = `Captando: ${noteToWrittenSolfege(note)} (${note}) · ${scoreEvents.length} nota${scoreEvents.length === 1 ? '' : 's'}`;
       transcriptionCandidateNote = null;
       transcriptionCandidateFrames = 0;
+      transcriptionCandidateStartedAt = null;
       return;
     }
     if(note !== lastDetectedNote){
       if(note !== transcriptionCandidateNote){
         transcriptionCandidateNote = note;
         transcriptionCandidateFrames = 1;
+        transcriptionCandidateStartedAt = currentTime;
         return;
       }
       transcriptionCandidateFrames += 1;
-      if(transcriptionCandidateFrames < 3) return;
-      if(currentScoreEvent) currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
-      currentScoreEvent = {note, originalNote:note, start:currentTime, duration:0};
+      if(transcriptionCandidateFrames < 4) return;
+      const noteStart = transcriptionCandidateStartedAt === null ? currentTime : transcriptionCandidateStartedAt;
+      if(currentScoreEvent) currentScoreEvent.duration = Math.max(80, noteStart - currentScoreEvent.start);
+      currentScoreEvent = {note, originalNote:note, start:noteStart, duration:0};
       scoreEvents.push(currentScoreEvent);
       transcriptionPeakRms = rms;
       transcriptionAttackArmed = false;
@@ -2019,23 +2045,29 @@ function captureTranscriptionNote(note, rms, attack = false){
     }
     transcriptionCandidateNote = null;
     transcriptionCandidateFrames = 0;
+    transcriptionCandidateStartedAt = null;
   } else {
     transcriptionCandidateNote = null;
     transcriptionCandidateFrames = 0;
-    transcriptionPeakRms = 0;
-    transcriptionAttackArmed = false;
+    transcriptionCandidateStartedAt = null;
     if(lastDetectedNote && currentScoreEvent){
-      currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
+      if(transcriptionSilenceStartedAt === null) transcriptionSilenceStartedAt = currentTime;
+      // Ignore dropouts shorter than 180 ms. This is below a sixteenth note at
+      // the supported practice tempos but long enough to bridge unstable tails.
+      if(currentTime - transcriptionSilenceStartedAt < 180) return;
+      currentScoreEvent.duration = Math.max(80, transcriptionSilenceStartedAt - currentScoreEvent.start);
       currentScoreEvent = null;
       lastDetectedNote = null;
     }
+    transcriptionPeakRms = 0;
+    transcriptionAttackArmed = false;
   }
 }
 
 function startScriptProcessorFallback(inputNode){
   if(!audioCtx || !inputNode) return;
   setBeginnerStatus('ready', 'Ouvindo', 'Microfone ativo. Toque a nota alvo com som claro.');
-  processor = audioCtx.createScriptProcessor(2048, 1, 1);
+  processor = audioCtx.createScriptProcessor(2048, 2, 1);
   inputNode.connect(processor);
   if(!silentGain){
     silentGain = audioCtx.createGain();
@@ -2045,12 +2077,27 @@ function startScriptProcessorFallback(inputNode){
   silentGain.connect(audioCtx.destination);
   processor.onaudioprocess = event => {
     lastMicrophoneFrameAt = performance.now();
-    const buf = event.inputBuffer.getChannelData(0);
+    let buf = event.inputBuffer.getChannelData(0);
+    // Analyse whichever interface input currently carries the strongest signal.
+    // The recording path remains stereo; this selection is only for pitch/RMS.
+    if(event.inputBuffer.numberOfChannels > 1){
+      const secondChannel = event.inputBuffer.getChannelData(1);
+      let firstEnergy = 0;
+      let secondEnergy = 0;
+      for(let i=0;i<buf.length;i++){
+        firstEnergy += buf[i] * buf[i];
+        secondEnergy += secondChannel[i] * secondChannel[i];
+      }
+      if(secondEnergy > firstEnergy) buf = secondChannel;
+    }
     let sum = 0;
     for(let i=0;i<buf.length;i++) sum += buf[i] * buf[i];
     const rms = Math.sqrt(sum / buf.length);
     const rmsRise = rms - prevRms;
-    const attack = prevRms > 0.0002 && rmsRise >= Math.max(0.002, prevRms * 0.55);
+    const attack = prevRms > 0.0002 && rmsRise >= Math.max(
+      transcriptionActive ? 0.0007 : 0.002,
+      prevRms * (transcriptionActive ? 0.28 : 0.55)
+    );
     prevRms = rms;
     captureCalibrationSample(rms);
     updateMicrophoneDiagnostic(rms);
@@ -2276,9 +2323,11 @@ function renderTranscriptionEditor(){
 
 function updateTranscriptionEditButtons(){
   const selected = selectedTranscriptionNoteIndex >= 0 && selectedTranscriptionNoteIndex < scoreEvents.length;
-  [transcriptionSemitoneDown, transcriptionNaturalNote, transcriptionSemitoneUp, transcriptionOctaveDown, transcriptionOctaveUp, transcriptionDeleteNote, ...transcriptionDurationTools].forEach(button=>{
+  [transcriptionNoteDown, transcriptionNoteUp, transcriptionSemitoneDown, transcriptionNaturalNote, transcriptionSemitoneUp, transcriptionOctaveDown, transcriptionOctaveUp, transcriptionDeleteNote, ...transcriptionDurationTools].forEach(button=>{
     if(button) button.disabled = !selected;
   });
+  if(transcriptionMoveLeft) transcriptionMoveLeft.disabled = !selected || selectedTranscriptionNoteIndex === 0;
+  if(transcriptionMoveRight) transcriptionMoveRight.disabled = !selected || selectedTranscriptionNoteIndex === scoreEvents.length - 1;
   const selectedFactor = selected
     ? quantizeDuration(Math.max(80, Number(scoreEvents[selectedTranscriptionNoteIndex].duration) || 0)).factor
     : null;
@@ -2287,9 +2336,22 @@ function updateTranscriptionEditButtons(){
   });
   if(transcriptionEditSelection){
     transcriptionEditSelection.textContent = selected
-      ? `Nota ${selectedTranscriptionNoteIndex + 1} selecionada: ${noteToWrittenSolfege(scoreEvents[selectedTranscriptionNoteIndex].note)} (${scoreEvents[selectedTranscriptionNoteIndex].note})`
+      ? `Nota ${selectedTranscriptionNoteIndex + 1}: ${noteToWrittenSolfege(scoreEvents[selectedTranscriptionNoteIndex].note)} (${scoreEvents[selectedTranscriptionNoteIndex].note}) · use ↑ ou ↓ para mudar na pauta`
       : 'Toque em uma nota abaixo da pauta para corrigir';
   }
+}
+
+async function moveSelectedTranscriptionNote(offset){
+  if(selectedTranscriptionNoteIndex < 0 || selectedTranscriptionNoteIndex >= scoreEvents.length) return;
+  const targetIndex = selectedTranscriptionNoteIndex + offset;
+  if(targetIndex < 0 || targetIndex >= scoreEvents.length) return;
+  const selectedEvent = scoreEvents[selectedTranscriptionNoteIndex];
+  scoreEvents[selectedTranscriptionNoteIndex] = scoreEvents[targetIndex];
+  scoreEvents[targetIndex] = selectedEvent;
+  selectedTranscriptionNoteIndex = targetIndex;
+  updateNoteDisplay();
+  updateTranscriptionKeyDisplay();
+  await renderStudentTranscription();
 }
 
 async function transposeSelectedTranscriptionNote(semitones){
@@ -3436,6 +3498,26 @@ function positionReadingOsmdCursor(localIndex){
   }
   for(let index = 0; index < cursorSteps; index += 1) cursor.next();
   cursor.show();
+  if(readingViewMode === 'accompaniment'){
+    window.requestAnimationFrame(followReadingAccompanimentCursor);
+  }
+}
+
+function followReadingAccompanimentCursor(){
+  if(readingViewMode !== 'accompaniment' || !readingScoreSvg) return;
+  const cursorElement = readingScoreSvg.querySelector(
+    '[id^="cursorImg"], .osmd-cursor, [class*="cursor"]'
+  );
+  if(!cursorElement) return;
+  const viewport = readingScoreSvg.getBoundingClientRect();
+  const cursorRect = cursorElement.getBoundingClientRect();
+  const cursorCenter = cursorRect.left + cursorRect.width / 2;
+  const target = readingScoreSvg.scrollLeft + cursorCenter - viewport.left - viewport.width * 0.42;
+  const maximum = Math.max(0, readingScoreSvg.scrollWidth - readingScoreSvg.clientWidth);
+  readingScoreSvg.scrollTo({
+    left: Math.max(0, Math.min(maximum, target)),
+    behavior: 'smooth',
+  });
 }
 
 function renderReadingScoreWithOsmd(exercise){
@@ -3450,7 +3532,13 @@ function renderReadingScoreWithOsmd(exercise){
       drawTitle: false,
       drawingParameters: 'compacttight',
       followCursor: false,
-      cursorsOptions: [{type:3, color:'#e7a3a0', alpha:0.45, follow:false}],
+      renderSingleHorizontalStaffline: readingViewMode === 'accompaniment',
+      cursorsOptions: [{
+        type: readingViewMode === 'accompaniment' ? 2 : 3,
+        color: readingViewMode === 'accompaniment' ? '#15966f' : '#e7a3a0',
+        alpha: readingViewMode === 'accompaniment' ? 0.92 : 0.45,
+        follow: false,
+      }],
     });
   }
   readingOsmd.Zoom = readingScoreZoom;
@@ -3757,9 +3845,13 @@ function syncOriginalScoreView(exercise = currentReadingExercise){
 
 function setReadingViewMode(mode){
   const showOriginal = mode === 'original' && currentReadingExercise && currentReadingExercise.originalSourceUrl;
+  const showAccompaniment = mode === 'accompaniment';
+  const previousMode = readingViewMode;
+  readingViewMode = showOriginal ? 'original' : (showAccompaniment ? 'accompaniment' : 'study');
   const scoreSurface = readingScoreSvg ? readingScoreSvg.closest('.score-page-surface') : null;
   if(scoreSurface) scoreSurface.hidden = false;
   if(scorePlayerShell) scorePlayerShell.classList.toggle('original-comparison', showOriginal);
+  if(scorePlayerShell) scorePlayerShell.classList.toggle('accompaniment-mode', showAccompaniment);
   if(readingOriginalView){
     readingOriginalView.hidden = !showOriginal;
     if(showOriginal){
@@ -3777,14 +3869,20 @@ function setReadingViewMode(mode){
       readingOriginalView.append(caption, guide, viewer);
     }
   }
-  if(readingStudyModeBtn) readingStudyModeBtn.classList.toggle('active', !showOriginal);
+  if(readingStudyModeBtn) readingStudyModeBtn.classList.toggle('active', !showOriginal && !showAccompaniment);
+  if(readingAccompanimentModeBtn) readingAccompanimentModeBtn.classList.toggle('active', showAccompaniment);
   if(readingOriginalModeBtn) readingOriginalModeBtn.classList.toggle('active', showOriginal);
   if(toggleExecutionViewBtn) toggleExecutionViewBtn.hidden = !showOriginal;
   if(!showOriginal && scorePlayerShell){
     scorePlayerShell.classList.remove('execution-hidden');
   }
   syncExecutionViewButton();
-  if(readingOsmd){
+  if(previousMode !== readingViewMode && currentReadingExercise){
+    if(readingOsmd && readingOsmd.cursor) readingOsmd.cursor.hide();
+    readingOsmd = null;
+    readingOsmdRenderPromise = null;
+    renderReadingScore(currentReadingExercise);
+  } else if(readingOsmd){
     window.requestAnimationFrame(()=>{
       try{ readingOsmd.render(); }catch(error){}
     });
@@ -5107,11 +5205,15 @@ if(stopTranscriptionBtn) stopTranscriptionBtn.addEventListener('click', ()=>{
 });
 if(playTranscriptionBtn) playTranscriptionBtn.addEventListener('click', playScoreSequence);
 if(playTranscriptionKeyBtn) playTranscriptionKeyBtn.addEventListener('click', playDetectedTranscriptionKey);
+if(transcriptionNoteDown) transcriptionNoteDown.addEventListener('click', ()=>transposeSelectedTranscriptionNote(-1));
+if(transcriptionNoteUp) transcriptionNoteUp.addEventListener('click', ()=>transposeSelectedTranscriptionNote(1));
 if(transcriptionSemitoneDown) transcriptionSemitoneDown.addEventListener('click', ()=>transposeSelectedTranscriptionNote(-1));
 if(transcriptionNaturalNote) transcriptionNaturalNote.addEventListener('click', naturalizeSelectedTranscriptionNote);
 if(transcriptionSemitoneUp) transcriptionSemitoneUp.addEventListener('click', ()=>transposeSelectedTranscriptionNote(1));
 if(transcriptionOctaveDown) transcriptionOctaveDown.addEventListener('click', ()=>transposeSelectedTranscriptionNote(-12));
 if(transcriptionOctaveUp) transcriptionOctaveUp.addEventListener('click', ()=>transposeSelectedTranscriptionNote(12));
+if(transcriptionMoveLeft) transcriptionMoveLeft.addEventListener('click', ()=>moveSelectedTranscriptionNote(-1));
+if(transcriptionMoveRight) transcriptionMoveRight.addEventListener('click', ()=>moveSelectedTranscriptionNote(1));
 if(transcriptionDeleteNote) transcriptionDeleteNote.addEventListener('click', deleteSelectedTranscriptionNote);
 transcriptionDurationTools.forEach(button=>{
   button.addEventListener('click', ()=>setSelectedTranscriptionDuration(Number(button.dataset.durationFactor)));

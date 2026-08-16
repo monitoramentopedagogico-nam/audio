@@ -646,11 +646,15 @@ if(stopTranscriptionBtn) stopTranscriptionBtn.addEventListener('click', ()=>{
 });
 if(playTranscriptionBtn) playTranscriptionBtn.addEventListener('click', playScoreSequence);
 if(playTranscriptionKeyBtn) playTranscriptionKeyBtn.addEventListener('click', playDetectedTranscriptionKey);
+if(transcriptionNoteDown) transcriptionNoteDown.addEventListener('click', ()=>transposeSelectedTranscriptionNote(-1));
+if(transcriptionNoteUp) transcriptionNoteUp.addEventListener('click', ()=>transposeSelectedTranscriptionNote(1));
 if(transcriptionSemitoneDown) transcriptionSemitoneDown.addEventListener('click', ()=>transposeSelectedTranscriptionNote(-1));
 if(transcriptionNaturalNote) transcriptionNaturalNote.addEventListener('click', naturalizeSelectedTranscriptionNote);
 if(transcriptionSemitoneUp) transcriptionSemitoneUp.addEventListener('click', ()=>transposeSelectedTranscriptionNote(1));
 if(transcriptionOctaveDown) transcriptionOctaveDown.addEventListener('click', ()=>transposeSelectedTranscriptionNote(-12));
 if(transcriptionOctaveUp) transcriptionOctaveUp.addEventListener('click', ()=>transposeSelectedTranscriptionNote(12));
+if(transcriptionMoveLeft) transcriptionMoveLeft.addEventListener('click', ()=>moveSelectedTranscriptionNote(-1));
+if(transcriptionMoveRight) transcriptionMoveRight.addEventListener('click', ()=>moveSelectedTranscriptionNote(1));
 if(transcriptionDeleteNote) transcriptionDeleteNote.addEventListener('click', deleteSelectedTranscriptionNote);
 transcriptionDurationTools.forEach(button=>{
   button.addEventListener('click', ()=>setSelectedTranscriptionDuration(Number(button.dataset.durationFactor)));

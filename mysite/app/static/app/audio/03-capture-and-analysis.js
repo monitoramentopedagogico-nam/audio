@@ -17,6 +17,8 @@ function start(){
   currentScoreEvent = null;
   transcriptionCandidateNote = null;
   transcriptionCandidateFrames = 0;
+  transcriptionCandidateStartedAt = null;
+  transcriptionSilenceStartedAt = null;
   transcriptionPeakRms = 0;
   transcriptionAttackArmed = false;
   selectedTranscriptionNoteIndex = -1;
@@ -26,7 +28,9 @@ function start(){
     echoCancellation: false,
     noiseSuppression: false,
     autoGainControl: false,
-    channelCount: 1
+    // Interfaces such as M-Audio commonly expose inputs 1 and 2 as a stereo
+    // pair. Request both so a source connected only to input 2 is not lost.
+    channelCount: {ideal: 2}
   };
   navigator.mediaDevices.getUserMedia({audio: audioConstraints}).then(stream=>{
     if(transcriptionStatus) transcriptionStatus.textContent = 'Microfone ativo. Toque notas claras e sustente cada figura pelo tempo desejado.';
@@ -111,7 +115,13 @@ function start(){
         // attack detection (fast increase in RMS)
         const currentRms = rms;
         const rmsRise = currentRms - prevRms;
-        const attack = prevRms > 0.0002 && rmsRise >= Math.max(0.002, prevRms * 0.55);
+        // Tongued repetitions on an audio interface often have a smaller
+        // envelope jump than a phone microphone. During transcription, accept
+        // that subtler rebound so repeated pitches remain separate notes.
+        const attack = prevRms > 0.0002 && rmsRise >= Math.max(
+          transcriptionActive ? 0.0007 : 0.002,
+          prevRms * (transcriptionActive ? 0.28 : 0.55)
+        );
         prevRms = currentRms;
         if(attackValEl) attackValEl.textContent = attack ? 'sim' : '—';
         // update RMS meter
@@ -248,14 +258,18 @@ function captureTranscriptionNote(note, rms, attack = false){
   const currentTime = performance.now() - captureStartTime;
   const transcriptionThreshold = transcriptionSignalThreshold();
   if(note && rms >= transcriptionThreshold){
+    // Brief pitch/RMS dropouts are common on sustained wind notes. Reacquiring
+    // a signal inside this window continues the existing note instead of
+    // producing a rest followed by another short note.
+    transcriptionSilenceStartedAt = null;
     if(transcriptionPeakRms <= 0) transcriptionPeakRms = rms;
-    if(rms <= transcriptionPeakRms * 0.68) transcriptionAttackArmed = true;
+    if(rms <= transcriptionPeakRms * 0.78) transcriptionAttackArmed = true;
     transcriptionPeakRms = Math.max(rms, transcriptionPeakRms * 0.992);
     const confirmedAttack = attack && transcriptionAttackArmed;
     // A new tongue attack can repeat the same pitch without an audible silence.
     // Split it only after a minimum duration so normal amplitude fluctuations do
     // not create duplicate notes.
-    if(note === lastDetectedNote && confirmedAttack && currentScoreEvent && currentTime - currentScoreEvent.start >= 120){
+    if(note === lastDetectedNote && confirmedAttack && currentScoreEvent && currentTime - currentScoreEvent.start >= 180){
       currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
       currentScoreEvent = {note, originalNote:note, start:currentTime, duration:0};
       scoreEvents.push(currentScoreEvent);
@@ -267,18 +281,21 @@ function captureTranscriptionNote(note, rms, attack = false){
       if(transcriptionStatus) transcriptionStatus.textContent = `Captando: ${noteToWrittenSolfege(note)} (${note}) · ${scoreEvents.length} nota${scoreEvents.length === 1 ? '' : 's'}`;
       transcriptionCandidateNote = null;
       transcriptionCandidateFrames = 0;
+      transcriptionCandidateStartedAt = null;
       return;
     }
     if(note !== lastDetectedNote){
       if(note !== transcriptionCandidateNote){
         transcriptionCandidateNote = note;
         transcriptionCandidateFrames = 1;
+        transcriptionCandidateStartedAt = currentTime;
         return;
       }
       transcriptionCandidateFrames += 1;
-      if(transcriptionCandidateFrames < 3) return;
-      if(currentScoreEvent) currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
-      currentScoreEvent = {note, originalNote:note, start:currentTime, duration:0};
+      if(transcriptionCandidateFrames < 4) return;
+      const noteStart = transcriptionCandidateStartedAt === null ? currentTime : transcriptionCandidateStartedAt;
+      if(currentScoreEvent) currentScoreEvent.duration = Math.max(80, noteStart - currentScoreEvent.start);
+      currentScoreEvent = {note, originalNote:note, start:noteStart, duration:0};
       scoreEvents.push(currentScoreEvent);
       transcriptionPeakRms = rms;
       transcriptionAttackArmed = false;
@@ -290,23 +307,29 @@ function captureTranscriptionNote(note, rms, attack = false){
     }
     transcriptionCandidateNote = null;
     transcriptionCandidateFrames = 0;
+    transcriptionCandidateStartedAt = null;
   } else {
     transcriptionCandidateNote = null;
     transcriptionCandidateFrames = 0;
-    transcriptionPeakRms = 0;
-    transcriptionAttackArmed = false;
+    transcriptionCandidateStartedAt = null;
     if(lastDetectedNote && currentScoreEvent){
-      currentScoreEvent.duration = Math.max(80, currentTime - currentScoreEvent.start);
+      if(transcriptionSilenceStartedAt === null) transcriptionSilenceStartedAt = currentTime;
+      // Ignore dropouts shorter than 180 ms. This is below a sixteenth note at
+      // the supported practice tempos but long enough to bridge unstable tails.
+      if(currentTime - transcriptionSilenceStartedAt < 180) return;
+      currentScoreEvent.duration = Math.max(80, transcriptionSilenceStartedAt - currentScoreEvent.start);
       currentScoreEvent = null;
       lastDetectedNote = null;
     }
+    transcriptionPeakRms = 0;
+    transcriptionAttackArmed = false;
   }
 }
 
 function startScriptProcessorFallback(inputNode){
   if(!audioCtx || !inputNode) return;
   setBeginnerStatus('ready', 'Ouvindo', 'Microfone ativo. Toque a nota alvo com som claro.');
-  processor = audioCtx.createScriptProcessor(2048, 1, 1);
+  processor = audioCtx.createScriptProcessor(2048, 2, 1);
   inputNode.connect(processor);
   if(!silentGain){
     silentGain = audioCtx.createGain();
@@ -316,12 +339,27 @@ function startScriptProcessorFallback(inputNode){
   silentGain.connect(audioCtx.destination);
   processor.onaudioprocess = event => {
     lastMicrophoneFrameAt = performance.now();
-    const buf = event.inputBuffer.getChannelData(0);
+    let buf = event.inputBuffer.getChannelData(0);
+    // Analyse whichever interface input currently carries the strongest signal.
+    // The recording path remains stereo; this selection is only for pitch/RMS.
+    if(event.inputBuffer.numberOfChannels > 1){
+      const secondChannel = event.inputBuffer.getChannelData(1);
+      let firstEnergy = 0;
+      let secondEnergy = 0;
+      for(let i=0;i<buf.length;i++){
+        firstEnergy += buf[i] * buf[i];
+        secondEnergy += secondChannel[i] * secondChannel[i];
+      }
+      if(secondEnergy > firstEnergy) buf = secondChannel;
+    }
     let sum = 0;
     for(let i=0;i<buf.length;i++) sum += buf[i] * buf[i];
     const rms = Math.sqrt(sum / buf.length);
     const rmsRise = rms - prevRms;
-    const attack = prevRms > 0.0002 && rmsRise >= Math.max(0.002, prevRms * 0.55);
+    const attack = prevRms > 0.0002 && rmsRise >= Math.max(
+      transcriptionActive ? 0.0007 : 0.002,
+      prevRms * (transcriptionActive ? 0.28 : 0.55)
+    );
     prevRms = rms;
     captureCalibrationSample(rms);
     updateMicrophoneDiagnostic(rms);
@@ -547,9 +585,11 @@ function renderTranscriptionEditor(){
 
 function updateTranscriptionEditButtons(){
   const selected = selectedTranscriptionNoteIndex >= 0 && selectedTranscriptionNoteIndex < scoreEvents.length;
-  [transcriptionSemitoneDown, transcriptionNaturalNote, transcriptionSemitoneUp, transcriptionOctaveDown, transcriptionOctaveUp, transcriptionDeleteNote, ...transcriptionDurationTools].forEach(button=>{
+  [transcriptionNoteDown, transcriptionNoteUp, transcriptionSemitoneDown, transcriptionNaturalNote, transcriptionSemitoneUp, transcriptionOctaveDown, transcriptionOctaveUp, transcriptionDeleteNote, ...transcriptionDurationTools].forEach(button=>{
     if(button) button.disabled = !selected;
   });
+  if(transcriptionMoveLeft) transcriptionMoveLeft.disabled = !selected || selectedTranscriptionNoteIndex === 0;
+  if(transcriptionMoveRight) transcriptionMoveRight.disabled = !selected || selectedTranscriptionNoteIndex === scoreEvents.length - 1;
   const selectedFactor = selected
     ? quantizeDuration(Math.max(80, Number(scoreEvents[selectedTranscriptionNoteIndex].duration) || 0)).factor
     : null;
@@ -558,9 +598,22 @@ function updateTranscriptionEditButtons(){
   });
   if(transcriptionEditSelection){
     transcriptionEditSelection.textContent = selected
-      ? `Nota ${selectedTranscriptionNoteIndex + 1} selecionada: ${noteToWrittenSolfege(scoreEvents[selectedTranscriptionNoteIndex].note)} (${scoreEvents[selectedTranscriptionNoteIndex].note})`
+      ? `Nota ${selectedTranscriptionNoteIndex + 1}: ${noteToWrittenSolfege(scoreEvents[selectedTranscriptionNoteIndex].note)} (${scoreEvents[selectedTranscriptionNoteIndex].note}) · use ↑ ou ↓ para mudar na pauta`
       : 'Toque em uma nota abaixo da pauta para corrigir';
   }
+}
+
+async function moveSelectedTranscriptionNote(offset){
+  if(selectedTranscriptionNoteIndex < 0 || selectedTranscriptionNoteIndex >= scoreEvents.length) return;
+  const targetIndex = selectedTranscriptionNoteIndex + offset;
+  if(targetIndex < 0 || targetIndex >= scoreEvents.length) return;
+  const selectedEvent = scoreEvents[selectedTranscriptionNoteIndex];
+  scoreEvents[selectedTranscriptionNoteIndex] = scoreEvents[targetIndex];
+  scoreEvents[targetIndex] = selectedEvent;
+  selectedTranscriptionNoteIndex = targetIndex;
+  updateNoteDisplay();
+  updateTranscriptionKeyDisplay();
+  await renderStudentTranscription();
 }
 
 async function transposeSelectedTranscriptionNote(semitones){
