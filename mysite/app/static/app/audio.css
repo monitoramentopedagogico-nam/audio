@@ -750,7 +750,7 @@
       .score-import-panel label,.score-import-panel input,.score-import-panel button{min-width:0;width:100%;max-width:100%}
       .saved-score-actions{display:grid;grid-template-columns:minmax(0,1fr)}
       .saved-score-actions input,.saved-score-actions button{min-width:0;width:100%}
-      .saved-score-item{display:grid;grid-template-columns:minmax(0,1fr) 1fr 1fr;align-items:stretch}
+      .saved-score-item{display:grid;grid-template-columns:minmax(0,1fr) repeat(3,1fr);align-items:stretch}
       .saved-score-item span{grid-column:1 / -1}
       #readingScoreSvg{
         width:100%;

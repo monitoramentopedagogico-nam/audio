@@ -332,7 +332,7 @@
       <div class="reading-disclosure-content">
       <div class="score-import-panel">
       <label>Importar partitura
-        <input id="scoreFileInput" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png,.musicxml,.xml,.mxl">
+        <input id="scoreFileInput" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png,.musicxml,.xml,.mxl,.mscz">
       </label>
       <button id="importScoreBtn" type="button">Ler PDF e preparar execu&ccedil;&atilde;o</button>
       <button id="captureScoreBtn" type="button">Fotografar partitura</button>
@@ -704,6 +704,6 @@
   <script>window.SAX_AUDIO_WORKLET_URL = "{% static 'app/audio-worklet-processor.js' %}";</script>
   <script src="{% static 'app/vendor/opensheetmusicdisplay-1.9.9.min.js' %}"></script>
   <script src="{% static 'app/audio-timing.js' %}"></script>
-  <script src="{% static 'app/audio.js' %}?v=20260816-richer-arrangement"></script>
+  <script src="{% static 'app/audio.js' %}?v=20260816-pdf-setup-measure"></script>
 </body>
 </html>

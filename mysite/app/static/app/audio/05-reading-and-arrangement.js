@@ -216,8 +216,8 @@ function sourceMusicXmlForReadingPage(exercise, pageStart, pageEnd){
   return new XMLSerializer().serializeToString(documentNode);
 }
 
-function readingPageMusicXml(exercise){
-  const pageRange = readingScorePageRanges(exercise)[readingScorePage];
+function readingPageMusicXml(exercise, pageIndex = readingScorePage, explicitRange = null){
+  const pageRange = explicitRange || readingScorePageRanges(exercise)[pageIndex];
   const pageStart = pageRange.start;
   const pageEnd = pageRange.end;
   const originalPageXml = sourceMusicXmlForReadingPage(exercise, pageStart, pageEnd);
@@ -235,11 +235,16 @@ function readingPageMusicXml(exercise){
   const divisions = 96;
   let measureNumber = 1 + (exercise.measureStarts || []).filter(index=>index <= pageStart).length;
   let measureBeats = 0;
+  const firstBoundary = Array.from(localMeasureStarts).sort((a, b)=>a - b)[0];
+  const firstMeasureDuration = firstBoundary === undefined
+    ? displayBeats.reduce((sum, beat)=>sum + beat, 0)
+    : displayBeats.slice(0, firstBoundary).reduce((sum, beat)=>sum + beat, 0);
+  const startsWithPickup = pageStart === 0 && firstBoundary !== undefined && firstMeasureDuration < measureCapacity - 0.001;
   let xml = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0">`;
   xml += `<work><work-title>${escapeMusicXmlText(exercise.title)}</work-title></work>`;
   xml += '<part-list><score-part id="P1"><part-name>Sax</part-name></score-part></part-list><part id="P1">';
-  const openMeasure = (includeAttributes)=>{
-    xml += `<measure number="${measureNumber}">`;
+  const openMeasure = (includeAttributes, implicit = false)=>{
+    xml += `<measure number="${measureNumber}"${implicit ? ' implicit="yes"' : ''}>`;
     if(includeAttributes){
       const keyFifths = Math.max(-7, Math.min(7, Number(exercise.keyFifths) || 0));
       xml += `<attributes><divisions>${divisions}</divisions><key><fifths>${keyFifths}</fifths></key>`;
@@ -247,7 +252,7 @@ function readingPageMusicXml(exercise){
       xml += `<direction placement="above"><sound tempo="${clampBpm(exercise.bpm || 60)}"/></direction>`;
     }
   };
-  openMeasure(true);
+  openMeasure(true, startsWithPickup);
   notes.forEach((note, index)=>{
     const durationBeats = displayBeats[index];
     const calculatedBoundary = index > 0 && !localMeasureStarts.size && measureBeats >= measureCapacity - 0.001;
@@ -269,6 +274,24 @@ function readingPageMusicXml(exercise){
     measureBeats += durationBeats;
   });
   return `${xml}</measure></part></score-partwise>`;
+}
+
+function musicXmlWithPdfSetupMeasure(xml){
+  if(typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') return xml;
+  const documentNode = new DOMParser().parseFromString(xml, 'application/xml');
+  if(documentNode.querySelector('parsererror')) return xml;
+  const part = documentNode.querySelector('score-partwise > part');
+  const firstMeasure = part && Array.from(part.children).find(child=>child.localName === 'measure');
+  if(!part || !firstMeasure) return xml;
+  const setupMeasure = documentNode.createElement('measure');
+  setupMeasure.setAttribute('number', '0');
+  setupMeasure.setAttribute('implicit', 'yes');
+  ['attributes', 'direction'].forEach(tag=>{
+    const element = Array.from(firstMeasure.children).find(child=>child.localName === tag);
+    if(element) setupMeasure.appendChild(element);
+  });
+  part.insertBefore(setupMeasure, firstMeasure);
+  return new XMLSerializer().serializeToString(documentNode);
 }
 
 function positionReadingOsmdCursor(localIndex){
@@ -881,6 +904,80 @@ async function deleteSavedScore(id, title){
   await loadSavedScores();
 }
 
+async function exportSavedScorePdf(score){
+  const scoreData = readingExerciseForStorage({...score.score_data, title:score.title});
+  if(!scoreData.notes.length || !window.opensheetmusicdisplay) return;
+  // The saved notes and beats are the authoritative edited version. An older
+  // sourceMusicXml may still contain the score as it was before corrections,
+  // reordered notes or capture cleanup, so PDF export must rebuild from the
+  // current saved arrays.
+  const pdfCapacity = readingMeasureCapacity(scoreData.meter || '4/4');
+  const pdfMeasureStarts = [];
+  let pdfMeasureBeats = 0;
+  scoreData.beats.forEach((rawBeat, index)=>{
+    const beat = Math.max(0.125, Number(rawBeat) || 1);
+    if(index > 0 && (pdfMeasureBeats >= pdfCapacity - 0.001 || pdfMeasureBeats + beat > pdfCapacity + 0.001)){
+      pdfMeasureStarts.push(index);
+      pdfMeasureBeats = 0;
+    }
+    pdfMeasureBeats += beat;
+  });
+  const pdfScoreData = {
+    ...scoreData,
+    measureStarts:pdfMeasureStarts,
+    sourceMusicXml:'',
+    sourceMeasureNoteStarts:[],
+  };
+  const printWindow = window.open('', '_blank');
+  if(!printWindow){
+    if(savedScoreStatus) savedScoreStatus.textContent = 'Permita pop-ups deste site para exportar o PDF.';
+    return;
+  }
+  printWindow.opener = null;
+  printWindow.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Preparando PDF</title></head><body><p>Preparando partitura...</p></body></html>');
+  printWindow.document.close();
+  if(savedScoreStatus) savedScoreStatus.textContent = `Preparando PDF de "${score.title}"...`;
+  const renderHost = document.createElement('div');
+  renderHost.style.cssText = 'position:fixed;left:-12000px;top:0;width:1120px;background:#fff;visibility:hidden';
+  document.body.appendChild(renderHost);
+  try{
+    const pages = [];
+    const page = document.createElement('div');
+    page.style.width = '1120px';
+    renderHost.appendChild(page);
+    const osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay(page, {
+      autoResize:false, backend:'svg', drawTitle:false, drawingParameters:'default', pageFormat:'Endless',
+    });
+    const completePdfXml = readingPageMusicXml(pdfScoreData, 0, {start:0, end:pdfScoreData.notes.length});
+    await osmd.load(musicXmlWithPdfSetupMeasure(completePdfXml));
+    osmd.render();
+    let pageSvgs = Array.from(page.querySelectorAll('.osmdCanvasPage > svg'));
+    if(!pageSvgs.length){
+      pageSvgs = Array.from(page.querySelectorAll('svg')).filter(svg=>!svg.parentElement.closest('svg'));
+    }
+    pageSvgs.forEach(svg=>pages.push(svg.outerHTML));
+    if(!pages.length) throw new Error('Nao foi possivel desenhar a partitura para o PDF.');
+    const title = escapeMusicXmlText(score.title || scoreData.title || 'Partitura');
+    const meter = escapeMusicXmlText(scoreData.meter || '4/4');
+    const bpm = clampBpm(scoreData.bpm || 60);
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${title}</title><style>
+      @page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{margin:0;color:#111;font-family:Arial,sans-serif}
+      header{border-bottom:1px solid #bbb;padding-bottom:3mm;margin-bottom:5mm}h1{font-size:18pt;margin:0 0 2mm}
+      .meta{display:flex;gap:8mm;color:#444;font-size:10pt}.score-page{break-after:page;page-break-after:always;width:100%}
+      .score-page:last-child{break-after:auto;page-break-after:auto}.score-page svg{display:block;width:100%!important;height:auto!important;max-width:none!important}
+    </style></head><body><header><h1>${title}</h1><div class="meta"><span>Compasso: ${meter}</span><span>BPM: ${bpm}</span><span>${scoreData.notes.length} notas</span></div></header>${pages.map((svg, index)=>`<section class="score-page" aria-label="Pagina ${index + 1}">${svg}</section>`).join('')}</body></html>`);
+    printWindow.document.close();
+    window.setTimeout(()=>{ printWindow.focus(); printWindow.print(); }, 250);
+    if(savedScoreStatus) savedScoreStatus.textContent = 'PDF preparado. Escolha "Salvar como PDF" na janela de impressao.';
+  }catch(error){
+    printWindow.close();
+    if(savedScoreStatus) savedScoreStatus.textContent = error.message || 'Falha ao preparar o PDF.';
+  }finally{
+    renderHost.remove();
+  }
+}
+
 async function loadSavedScores(){
   if(!savedScoresList) return;
   try {
@@ -907,11 +1004,15 @@ async function loadSavedScores(){
         loadReadingExercise(score.score_data, score.title);
         if(savedScoreStatus) savedScoreStatus.textContent = `Partitura "${score.title}" carregada.`;
       });
+      const exportPdf = document.createElement('button');
+      exportPdf.type = 'button';
+      exportPdf.textContent = 'Exportar PDF';
+      exportPdf.addEventListener('click', ()=>exportSavedScorePdf(score));
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.textContent = 'Excluir';
       remove.addEventListener('click', ()=>deleteSavedScore(score.id, score.title));
-      item.append(label, open, remove);
+      item.append(label, open, exportPdf, remove);
       savedScoresList.appendChild(item);
     });
   } catch(error) {

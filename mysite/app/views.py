@@ -49,7 +49,7 @@ def _valid_score_signature(upload, extension):
         return header.startswith(b'\xff\xd8\xff')
     if extension == '.png':
         return header.startswith(b'\x89PNG\r\n\x1a\n')
-    if extension == '.mxl':
+    if extension in {'.mxl', '.mscz'}:
         return header.startswith(b'PK\x03\x04')
     if extension in {'.xml', '.musicxml'}:
         return stripped.startswith(b'<?xml') or stripped.startswith(b'<score-')
@@ -78,6 +78,177 @@ def _musicxml_bytes(path):
         if archive.getinfo(candidates[0]).file_size > MAX_SCORE_BYTES:
             raise ValueError('The expanded MusicXML exceeds the 15 MB limit.')
         return archive.read(candidates[0])
+
+
+def _musescore_bytes(path):
+    with zipfile.ZipFile(path) as archive:
+        candidates = [name for name in archive.namelist() if name.lower().endswith('.mscx')]
+        if not candidates:
+            raise ValueError('Arquivo MSCX nao encontrado dentro do MSCZ.')
+        member = archive.getinfo(candidates[0])
+        if member.file_size > MAX_SCORE_BYTES:
+            raise ValueError('A partitura MuseScore expandida excede o limite de 15 MB.')
+        return archive.read(member)
+
+
+def _parse_musescore_score(mscx_bytes):
+    source_root = ElementTree.fromstring(mscx_bytes)
+    score = source_root.find('./Score')
+    if score is None:
+        raise ValueError('Estrutura MuseScore invalida.')
+    staff = score.find("./Staff[@id='1']") or score.find('./Staff')
+    if staff is None:
+        raise ValueError('Nenhuma pauta foi encontrada no arquivo MuseScore.')
+
+    title = 'Partitura MuseScore importada'
+    for meta in score.findall('./metaTag'):
+        if meta.attrib.get('name') == 'workTitle' and (meta.text or '').strip():
+            title = meta.text.strip()
+            break
+    part_id = staff.attrib.get('id', '1')
+    part = score.find(f"./Part[@id='{part_id}']") or score.find('./Part')
+    transpose = 0
+    if part is not None:
+        try:
+            transpose = -int(part.findtext('./Instrument/transposeChromatic') or 0)
+        except ValueError:
+            transpose = 0
+
+    duration_beats = {
+        'long': 16, 'breve': 8, 'whole': 4, 'half': 2, 'quarter': 1,
+        'eighth': .5, '16th': .25, '32nd': .125, '64th': .0625,
+    }
+    pitch_names_sharp = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
+    pitch_names_flat = ('C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B')
+    notes, beats, measure_starts, source_measure_note_starts = [], [], [], []
+    bpm, meter, key_fifths = 60, '4/4', 0
+    divisions = 480
+
+    xml_root = ElementTree.Element('score-partwise', version='3.1')
+    work = ElementTree.SubElement(xml_root, 'work')
+    ElementTree.SubElement(work, 'work-title').text = title
+    part_list = ElementTree.SubElement(xml_root, 'part-list')
+    score_part = ElementTree.SubElement(part_list, 'score-part', id='P1')
+    ElementTree.SubElement(score_part, 'part-name').text = (
+        part.findtext('./trackName') if part is not None else 'MuseScore'
+    ) or 'MuseScore'
+    xml_part = ElementTree.SubElement(xml_root, 'part', id='P1')
+    has_seen_pitch = False
+
+    for measure_index, measure in enumerate(staff.findall('./Measure'), 1):
+        notes_before = len(notes)
+        source_measure_note_starts.append(notes_before)
+        xml_measure = ElementTree.SubElement(xml_part, 'measure', number=str(measure_index))
+        voice = measure.find('./voice')
+        if voice is None:
+            continue
+        key_sig = voice.find('./KeySig')
+        time_sig = voice.find('./TimeSig')
+        tempo = voice.find('./Tempo')
+        if key_sig is not None:
+            try:
+                key_fifths = max(-7, min(7, int(key_sig.findtext('./actualKey') or key_sig.findtext('./concertKey') or 0)))
+            except ValueError:
+                key_fifths = 0
+        if time_sig is not None:
+            numerator = time_sig.findtext('./sigN') or '4'
+            denominator = time_sig.findtext('./sigD') or '4'
+            meter = f'{numerator}/{denominator}'
+        if tempo is not None:
+            try:
+                bpm = max(30, min(240, round(float(tempo.findtext('./tempo') or 1) * 60)))
+            except ValueError:
+                pass
+
+        if measure_index == 1 or key_sig is not None or time_sig is not None:
+            attributes = ElementTree.SubElement(xml_measure, 'attributes')
+            ElementTree.SubElement(attributes, 'divisions').text = str(divisions)
+            key = ElementTree.SubElement(attributes, 'key')
+            ElementTree.SubElement(key, 'fifths').text = str(key_fifths)
+            time = ElementTree.SubElement(attributes, 'time')
+            meter_parts = meter.split('/', 1)
+            ElementTree.SubElement(time, 'beats').text = meter_parts[0]
+            ElementTree.SubElement(time, 'beat-type').text = meter_parts[1]
+            clef = ElementTree.SubElement(attributes, 'clef')
+            ElementTree.SubElement(clef, 'sign').text = 'G'
+            ElementTree.SubElement(clef, 'line').text = '2'
+        if tempo is not None:
+            direction = ElementTree.SubElement(xml_measure, 'direction', placement='above')
+            ElementTree.SubElement(direction, 'sound', tempo=str(bpm))
+
+        tuplet_remaining = 0
+        tuplet_ratio = 1.0
+        for event in list(voice):
+            if event.tag == 'Tuplet':
+                try:
+                    actual = max(1, int(event.findtext('./actualNotes') or 1))
+                    normal = max(1, int(event.findtext('./normalNotes') or actual))
+                    tuplet_remaining, tuplet_ratio = actual, normal / actual
+                except ValueError:
+                    tuplet_remaining, tuplet_ratio = 0, 1.0
+                continue
+            if event.tag not in {'Chord', 'Rest'}:
+                continue
+            duration_type = event.findtext('./durationType') or 'quarter'
+            if duration_type == 'measure':
+                meter_parts = meter.split('/', 1)
+                factor = float(meter_parts[0]) * 4 / float(meter_parts[1])
+            else:
+                factor = duration_beats.get(duration_type, 1)
+            try:
+                dot_count = max(0, int(event.findtext('./dots') or 0))
+            except ValueError:
+                dot_count = 0
+            factor *= sum(.5 ** dot for dot in range(dot_count + 1))
+            if tuplet_remaining:
+                factor *= tuplet_ratio
+                tuplet_remaining -= 1
+                if not tuplet_remaining:
+                    tuplet_ratio = 1.0
+            source_note = event.find('./Note') if event.tag == 'Chord' else None
+            if source_note is None and not has_seen_pitch:
+                # The execution timeline starts at the first playable note. Do
+                # not leave a wide, apparently blank measure before that note.
+                xml_measure.set('implicit', 'yes')
+                continue
+            xml_note = ElementTree.SubElement(xml_measure, 'note')
+            if source_note is None:
+                ElementTree.SubElement(xml_note, 'rest')
+            else:
+                has_seen_pitch = True
+                try:
+                    midi = max(0, min(127, int(source_note.findtext('./pitch') or 60) + transpose))
+                except ValueError:
+                    midi = 60
+                name = (pitch_names_flat if key_fifths < 0 else pitch_names_sharp)[midi % 12]
+                step, accidental = name[0], name[1:]
+                octave = midi // 12 - 1
+                pitch = ElementTree.SubElement(xml_note, 'pitch')
+                ElementTree.SubElement(pitch, 'step').text = step
+                if accidental:
+                    ElementTree.SubElement(pitch, 'alter').text = '-1' if accidental == 'b' else '1'
+                ElementTree.SubElement(pitch, 'octave').text = str(octave)
+                notes.append(f'{name}{octave}')
+                beats.append(factor)
+            ElementTree.SubElement(xml_note, 'duration').text = str(max(1, round(factor * divisions)))
+            ElementTree.SubElement(xml_note, 'voice').text = '1'
+            if duration_type != 'measure':
+                ElementTree.SubElement(xml_note, 'type').text = duration_type
+            for _ in range(dot_count):
+                ElementTree.SubElement(xml_note, 'dot')
+        if len(notes) > notes_before and notes_before > 0:
+            measure_starts.append(notes_before)
+        if len(notes) >= MAX_SCORE_NOTES:
+            break
+
+    if not notes:
+        raise ValueError('Nenhuma melodia executavel foi encontrada na primeira pauta do MuseScore.')
+    return {
+        'title': title, 'notes': notes[:MAX_SCORE_NOTES], 'beats': beats[:MAX_SCORE_NOTES],
+        'bpm': bpm, 'meter': meter, 'key_fifths': key_fifths,
+        'measure_starts': measure_starts, 'source_measure_note_starts': source_measure_note_starts,
+        'source_musicxml': ElementTree.tostring(xml_root, encoding='unicode'),
+    }
 
 
 def _parse_musicxml_score(xml_bytes):
@@ -347,11 +518,11 @@ def fetch_chord_sheet(request):
 def import_score(request):
     score = request.FILES.get('score')
     if not score:
-        return HttpResponseBadRequest('Choose a PDF, photo, MusicXML, XML, or MXL file.')
+        return HttpResponseBadRequest('Choose a PDF, photo, MusicXML, XML, MXL, or MSCZ file.')
     if score.size > MAX_SCORE_BYTES:
         return HttpResponseBadRequest('The score exceeds the 15 MB limit.')
     extension = Path(score.name).suffix.lower()
-    if extension not in {'.pdf', '.jpg', '.jpeg', '.png', '.musicxml', '.xml', '.mxl'}:
+    if extension not in {'.pdf', '.jpg', '.jpeg', '.png', '.musicxml', '.xml', '.mxl', '.mscz'}:
         return HttpResponseBadRequest('Unsupported score format.')
     if not _valid_score_signature(score, extension):
         return JsonResponse(
@@ -378,7 +549,7 @@ def import_score(request):
             omr_input = _prepare_score_photo(input_path, temp_dir) if extension in image_extensions else input_path
             needs_omr = extension == '.pdf' or extension in image_extensions
             musicxml_path = _convert_score_with_audiveris(omr_input, temp_dir) if needs_omr else input_path
-            parsed = _parse_musicxml_score(_musicxml_bytes(musicxml_path))
+            parsed = _parse_musescore_score(_musescore_bytes(musicxml_path)) if extension == '.mscz' else _parse_musicxml_score(_musicxml_bytes(musicxml_path))
             source = None
             if extension in {'.pdf', '.jpg', '.jpeg', '.png'}:
                 from .models import ScoreSource
