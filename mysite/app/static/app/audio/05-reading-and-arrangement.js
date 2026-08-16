@@ -1211,7 +1211,7 @@ function renderArrangement(analysis){
     ? ` Tom original: ${analysis.originalKey} (${noteToSolfege(`${analysis.originalKey.replace(/m$/, '')}4`)}${/m$/.test(analysis.originalKey) ? ' menor' : ''}). Para ${getInstrumentLabel()}: escrever ${analysis.writtenKey || '-'}.`
     : '';
   arrangementSummary.textContent = analysis.chords.length
-    ? `${analysis.chords.length} acordes na progressao. ${analysis.measures.length} compassos gerados: nota forte, notas de passagem e aproximacao para o proximo acorde.${keyInfo}`
+    ? `${analysis.chords.length} acordes na progressao. ${analysis.measures.length} compassos gerados com motivos variados, condução melódica, notas de cor e aproximação para o próximo acorde.${keyInfo}`
     : 'Nao encontrei acordes. Cole a cifra com acordes como C, G, Am, F.';
   analysis.chords.slice(0, 32).forEach((chord)=>{
     const chip = document.createElement('span');

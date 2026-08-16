@@ -3010,6 +3010,22 @@ function approachMidi(fromMidi, targetMidi){
   return normalizeArrangementMidi(targetMidi - direction);
 }
 
+function nearestChordIntervalMidi(targetMidi, chord, interval){
+  const rootMidi = noteNameToMidiNumber(chordRootToNote(chord));
+  if(rootMidi === null) return normalizeArrangementMidi(targetMidi);
+  let best = rootMidi + interval;
+  let bestDistance = Infinity;
+  for(let octave = -3; octave <= 3; octave += 1){
+    const candidate = rootMidi + interval + octave * 12;
+    const distance = Math.abs(candidate - targetMidi);
+    if(distance < bestDistance){
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return normalizeArrangementMidi(best);
+}
+
 function degreeLabelForMidi(midi, chord){
   const rootMidi = noteNameToMidiNumber(chordRootToNote(chord));
   if(rootMidi === null) return '?';
@@ -3025,9 +3041,25 @@ function arrangementPhraseIntervals(chord, style, index){
   const tones = chordToneIntervals(chord);
   const quality = chordQuality(chord);
   if(style === 'simple') return [tones[0], tones[1], tones[2], tones[1]];
-  if(style === 'response') return index % 2 === 0 ? [tones[0], 2, tones[1], tones[2]] : [tones[2], tones[1], 2, tones[0]];
-  if(style === 'ending') return quality === 'minor' ? [tones[2], 10, tones[1], tones[0]] : [tones[2], 9, tones[1], tones[0]];
-  return quality === 'minor' ? [tones[0], tones[1], tones[2], 2] : [tones[0], tones[1], tones[3], 2];
+  if(style === 'response'){
+    const responsePatterns = [
+      [tones[0], 2, tones[1], tones[2]],
+      [tones[2], tones[1], 2, tones[0]],
+      [tones[1], tones[2], quality === 'minor' ? 10 : 9, tones[1]],
+      [tones[2], quality === 'minor' ? 5 : 6, tones[1], tones[0]],
+    ];
+    return responsePatterns[index % responsePatterns.length];
+  }
+  if(style === 'ending'){
+    const endingPatterns = quality === 'minor'
+      ? [[tones[2], 10, tones[1], tones[0]], [tones[1], 2, tones[0], tones[0]]]
+      : [[tones[2], 9, tones[1], tones[0]], [tones[1], 2, 11, tones[0]]];
+    return endingPatterns[index % endingPatterns.length];
+  }
+  const worshipPatterns = quality === 'minor'
+    ? [[tones[0], tones[1], tones[2], 2], [tones[2], 10, tones[1], tones[0]], [tones[1], 5, tones[2], 10], [tones[0], 2, tones[1], tones[2]]]
+    : [[tones[0], tones[1], tones[3], 2], [tones[2], 9, tones[1], tones[0]], [tones[1], 6, tones[2], 9], [tones[0], 2, tones[1], tones[2]]];
+  return worshipPatterns[index % worshipPatterns.length];
 }
 
 function buildArrangementNotes(chords, style){
@@ -3045,11 +3077,23 @@ function buildArrangementNotes(chords, style){
     const nextRootMidi = noteNameToMidiNumber(chordRootToNote(nextChord));
     const resolutionTarget = nextRootMidi === null ? rootMidi : nearestChordToneMidi(nextRootMidi, nextChord);
     const intervalPhrase = arrangementPhraseIntervals(chord, style || 'worship', index);
-    const anchor = notes.length ? nearestChordToneMidi(noteNameToMidiNumber(notes[notes.length - 1]) + 2, chord) : normalizeArrangementMidi(rootMidi + intervalPhrase[0]);
-    const phrase = intervalPhrase.map((interval, noteIndex)=>{
-      if(noteIndex === 0) return nearestChordToneMidi(anchor, chord);
-      if(noteIndex === 3 && style !== 'ending') return approachMidi(rootMidi + interval, resolutionTarget);
-      return normalizeArrangementMidi(rootMidi + interval);
+    const previousMidi = notes.length ? noteNameToMidiNumber(notes[notes.length - 1]) : null;
+    const contourPush = index % 4 < 2 ? 2 : -2;
+    const anchor = previousMidi !== null
+      ? nearestChordToneMidi(previousMidi + contourPush, chord)
+      : normalizeArrangementMidi(rootMidi + intervalPhrase[0]);
+    const phrase = [];
+    intervalPhrase.forEach((interval, noteIndex)=>{
+      if(noteIndex === 0){
+        phrase.push(anchor);
+        return;
+      }
+      if(noteIndex === 3 && style !== 'ending'){
+        phrase.push(approachMidi(phrase[noteIndex - 1], resolutionTarget));
+        return;
+      }
+      const contour = noteIndex === 1 ? (index % 2 === 0 ? 3 : -3) : (index % 3 === 0 ? 2 : -2);
+      phrase.push(nearestChordIntervalMidi(phrase[noteIndex - 1] + contour, chord, interval));
     });
     const measureLabels = [];
     const degrees = [];
@@ -4415,7 +4459,7 @@ function renderArrangement(analysis){
     ? ` Tom original: ${analysis.originalKey} (${noteToSolfege(`${analysis.originalKey.replace(/m$/, '')}4`)}${/m$/.test(analysis.originalKey) ? ' menor' : ''}). Para ${getInstrumentLabel()}: escrever ${analysis.writtenKey || '-'}.`
     : '';
   arrangementSummary.textContent = analysis.chords.length
-    ? `${analysis.chords.length} acordes na progressao. ${analysis.measures.length} compassos gerados: nota forte, notas de passagem e aproximacao para o proximo acorde.${keyInfo}`
+    ? `${analysis.chords.length} acordes na progressao. ${analysis.measures.length} compassos gerados com motivos variados, condução melódica, notas de cor e aproximação para o próximo acorde.${keyInfo}`
     : 'Nao encontrei acordes. Cole a cifra com acordes como C, G, Am, F.';
   analysis.chords.slice(0, 32).forEach((chord)=>{
     const chip = document.createElement('span');
